@@ -1,0 +1,19 @@
+{
+  "apply": "Apply",
+  "apply_all": "Apply All",
+  "clinical_notes": "Clinical Notes",
+  "copy_transcript": "Copy Transcript",
+  "dismiss": "Dismiss",
+  "form_fields": "Form Fields",
+  "generating_notes": "Generating medical notes...",
+  "listening_to_consultation": "Listening to consultation...",
+  "notes_ready": "Notes Ready",
+  "pause": "Pause",
+  "processing": "Processing",
+  "recording": "Recording",
+  "resume": "Resume",
+  "scribe": "AI Scribe",
+  "start_recording": "Start Recording",
+  "stop_recording": "Stop Recording",
+  "transcript": "Transcript"
+}

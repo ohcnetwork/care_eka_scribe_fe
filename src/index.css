@@ -1,0 +1,44 @@
+@config '../tailwind.config.js';
+
+.care-eka-scribe-fe-container {
+  @import "tailwindcss";
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+/* EkaScribe field highlight — applied to care_fe question nodes (#question-{id}) */
+@keyframes ekascribe-field-pulse {
+  0%,
+  100% {
+    background-color: rgba(13, 159, 110, 0.06);
+    box-shadow: 0 0 0 0 rgba(13, 159, 110, 0.35);
+  }
+  50% {
+    background-color: rgba(13, 159, 110, 0.14);
+    box-shadow: 0 0 0 6px rgba(13, 159, 110, 0);
+  }
+}
+
+.ekascribe-highlight {
+  animation: ekascribe-field-pulse 0.75s ease-in-out 3;
+  border-radius: 0.5rem;
+  outline: 2px solid rgba(13, 159, 110, 0.55);
+  outline-offset: 2px;
+  transition: background-color 0.3s ease;
+}
