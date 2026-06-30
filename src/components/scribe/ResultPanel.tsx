@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 
+import { useTranslation } from "@/hooks/useTranslation";
+
 interface ResultPanelProps {
   result: ScribeResult;
   formFields?: Array<{
@@ -32,6 +34,7 @@ export function ResultPanel({
   onApplyAll,
   onDismiss,
 }: ResultPanelProps) {
+  const { t } = useTranslation();
   const hasTranscript = !!result.transcript;
   const hasNotes =
     !!result.structuredData && Object.keys(result.structuredData).length > 0;
@@ -81,7 +84,9 @@ export function ResultPanel({
         <div className="flex items-center gap-2">
           <div className="h-2 w-2 rounded-full bg-green-500" />
           <span className="text-sm font-medium text-gray-700">
-            {hasTranscript || hasNotes ? "Notes Ready" : "Processing Complete"}
+            {hasTranscript || hasNotes
+              ? t("notes_ready")
+              : t("processing_complete")}
           </span>
         </div>
         <button
@@ -102,7 +107,7 @@ export function ResultPanel({
               className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50"
             >
               <span className="text-sm font-medium text-gray-900">
-                Clinical Notes
+                {t("clinical_notes")}
               </span>
               {expandedSections.has("notes") ? (
                 <ChevronUp className="h-4 w-4 text-gray-400" />
@@ -145,10 +150,10 @@ export function ResultPanel({
                           >
                             {isApplied ? (
                               <span className="flex items-center gap-1">
-                                <Check className="h-3 w-3" /> Applied
+                                <Check className="h-3 w-3" /> {t("applied")}
                               </span>
                             ) : (
-                              "Apply"
+                              t("apply")
                             )}
                           </button>
                         )}
@@ -172,7 +177,7 @@ export function ResultPanel({
               className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50"
             >
               <span className="text-sm font-medium text-gray-900">
-                Transcript
+                {t("transcript")}
               </span>
               {expandedSections.has("transcript") ? (
                 <ChevronUp className="h-4 w-4 text-gray-400" />
@@ -186,7 +191,7 @@ export function ResultPanel({
                   <button
                     onClick={handleCopyTranscript}
                     className="absolute top-2 right-2 rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
-                    title="Copy transcript"
+                    title={t("copy_transcript")}
                   >
                     {copied ? (
                       <Check className="h-3.5 w-3.5 text-green-500" />
@@ -211,7 +216,7 @@ export function ResultPanel({
               className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50"
             >
               <span className="text-sm font-medium text-gray-900">
-                Form Fields
+                {t("form_fields")}
               </span>
               {expandedSections.has("fields") ? (
                 <ChevronUp className="h-4 w-4 text-gray-400" />
@@ -252,7 +257,7 @@ export function ResultPanel({
                             : "bg-primary-50 text-primary-700 hover:bg-primary-100",
                         )}
                       >
-                        {isApplied ? "✓" : "Apply"}
+                        {isApplied ? "✓" : t("apply")}
                       </button>
                     </div>
                   );
@@ -266,12 +271,12 @@ export function ResultPanel({
       {/* Footer Actions */}
       <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3">
         <Button variant="ghost" size="sm" onClick={onDismiss}>
-          Dismiss
+          {t("dismiss")}
         </Button>
         {onApplyAll && result.structuredData && (
           <Button variant="primary" size="sm" onClick={handleApplyAll}>
             <CheckCheck className="mr-1 h-3.5 w-3.5" />
-            Apply All
+            {t("apply_all")}
           </Button>
         )}
       </div>

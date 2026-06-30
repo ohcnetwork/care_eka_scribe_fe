@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 
+import { useTranslation } from "@/hooks/useTranslation";
+
 interface RecordingPanelProps {
   status: ScribeStatus;
   duration: number;
@@ -40,6 +42,8 @@ export function RecordingPanel({
   onCancel,
   onDismiss,
 }: RecordingPanelProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex flex-col">
       {/* Header */}
@@ -55,10 +59,10 @@ export function RecordingPanel({
             )}
           />
           <span className="text-sm font-medium text-gray-700">
-            {status === "recording" && "Recording"}
-            {status === "paused" && "Paused"}
-            {status === "processing" && "Processing..."}
-            {status === "failed" && "Failed"}
+            {status === "recording" && t("recording")}
+            {status === "paused" && t("paused")}
+            {status === "processing" && t("processing")}
+            {status === "failed" && t("failed")}
           </span>
         </div>
         <button
@@ -94,8 +98,8 @@ export function RecordingPanel({
             </span>
             <p className="text-center text-sm text-gray-500">
               {status === "recording"
-                ? "Listening to consultation..."
-                : "Recording paused"}
+                ? t("listening_to_consultation")
+                : t("recording_paused")}
             </p>
           </>
         )}
@@ -106,7 +110,7 @@ export function RecordingPanel({
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
             <span className="text-sm font-medium text-gray-700">
-              Generating medical notes...
+              {t("generating_notes")}
             </span>
           </>
         )}
@@ -127,11 +131,11 @@ export function RecordingPanel({
           <>
             <Button variant="outline" size="sm" onClick={onPause}>
               <Pause className="mr-1 h-3.5 w-3.5" />
-              Pause
+              {t("pause")}
             </Button>
             <Button variant="destructive" size="sm" onClick={onStop}>
               <Square className="mr-1 h-3.5 w-3.5" />
-              Stop & Process
+              {t("stop_and_process")}
             </Button>
           </>
         )}
@@ -140,24 +144,24 @@ export function RecordingPanel({
           <>
             <Button variant="primary" size="sm" onClick={onResume}>
               <Play className="mr-1 h-3.5 w-3.5" />
-              Resume
+              {t("resume")}
             </Button>
             <Button variant="destructive" size="sm" onClick={onStop}>
               <Square className="mr-1 h-3.5 w-3.5" />
-              Stop & Process
+              {t("stop_and_process")}
             </Button>
           </>
         )}
 
         {status === "processing" && (
           <Button variant="outline" size="sm" onClick={onCancel} disabled>
-            Processing...
+            {t("processing")}
           </Button>
         )}
 
         {status === "failed" && (
           <Button variant="outline" size="sm" onClick={onDismiss}>
-            Dismiss
+            {t("dismiss")}
           </Button>
         )}
       </div>

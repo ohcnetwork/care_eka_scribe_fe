@@ -16,6 +16,7 @@ import type { ScribeResult } from "@/lib/types/scribe";
 import { cn } from "@/lib/utils";
 
 import { useScribe } from "@/hooks/useScribe";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ScribeControllerProps {
   formState?: unknown;
@@ -28,6 +29,7 @@ export function ScribeController({
   formState,
   setFormState,
 }: ScribeControllerProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [transcriptMinimized, setTranscriptMinimized] = useState(false);
   const appliedRef = useRef(false);
@@ -139,7 +141,7 @@ export function ScribeController({
           "fixed right-6 bottom-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary-700 text-white shadow-lg transition-transform",
           scribe.isStarting ? "cursor-wait opacity-90" : "hover:scale-105",
         )}
-        title={scribe.isStarting ? "Starting…" : "Start AI Scribe"}
+        title={scribe.isStarting ? t("starting") : t("start_ai_scribe")}
       >
         {scribe.isStarting ? (
           <Loader2 className="h-5 w-5 animate-spin" />
@@ -164,18 +166,18 @@ export function ScribeController({
           <div className="w-72 rounded-lg border border-gray-200 bg-white p-2.5 shadow-md">
             <div className="mb-1 flex items-center justify-between">
               <span className="text-[10px] font-medium text-gray-400 uppercase">
-                Transcript
+                {t("transcript")}
               </span>
               <div className="flex items-center gap-1">
                 {scribe.status === "completed" && (
                   <span className="text-[10px] font-medium text-green-600">
-                    ✓ {filledCount} filled
+                    {t("filled_count", { n: filledCount })}
                   </span>
                 )}
                 <button
                   onClick={() => setTranscriptMinimized(true)}
                   className="rounded p-0.5 text-gray-400 hover:bg-gray-100"
-                  title="Minimize transcript"
+                  title={t("minimize_transcript")}
                 >
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
@@ -209,15 +211,17 @@ export function ScribeController({
           )}
 
           {scribe.status === "processing" && (
-            <span className="text-xs text-gray-500">Processing…</span>
+            <span className="text-xs text-gray-500">{t("processing")}</span>
           )}
 
           {scribe.status === "completed" && (
-            <span className="text-xs font-medium text-green-700">Done</span>
+            <span className="text-xs font-medium text-green-700">
+              {t("done")}
+            </span>
           )}
 
           {scribe.status === "failed" && (
-            <span className="text-xs text-red-500">Failed</span>
+            <span className="text-xs text-red-500">{t("failed")}</span>
           )}
 
           {/* Inline controls */}
@@ -226,14 +230,14 @@ export function ScribeController({
               <button
                 onClick={scribe.pauseRecording}
                 className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-                title="Pause"
+                title={t("pause")}
               >
                 <Pause className="h-3 w-3" />
               </button>
               <button
                 onClick={handleStop}
                 className="rounded-full p-1 text-red-500 hover:bg-red-50"
-                title="Stop & Process"
+                title={t("stop_and_process")}
               >
                 <Square className="h-3 w-3" />
               </button>
@@ -245,14 +249,14 @@ export function ScribeController({
               <button
                 onClick={scribe.resumeRecording}
                 className="rounded-full p-1 text-primary-600 hover:bg-primary-50"
-                title="Resume"
+                title={t("resume")}
               >
                 <Play className="h-3 w-3" />
               </button>
               <button
                 onClick={handleStop}
                 className="rounded-full p-1 text-red-500 hover:bg-red-50"
-                title="Stop & Process"
+                title={t("stop_and_process")}
               >
                 <Square className="h-3 w-3" />
               </button>
@@ -266,7 +270,7 @@ export function ScribeController({
                 <button
                   onClick={() => setTranscriptMinimized(false)}
                   className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-                  title="Show transcript"
+                  title={t("show_transcript")}
                 >
                   <FileText className="h-3 w-3" />
                 </button>
@@ -280,7 +284,7 @@ export function ScribeController({
                 <button
                   onClick={() => setTranscriptMinimized(false)}
                   className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-                  title="Show transcript"
+                  title={t("show_transcript")}
                 >
                   <FileText className="h-3 w-3" />
                 </button>
@@ -288,7 +292,7 @@ export function ScribeController({
               <button
                 onClick={handleDismiss}
                 className="rounded-full p-1 text-gray-400 hover:bg-gray-100"
-                title="Dismiss"
+                title={t("dismiss")}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -301,7 +305,7 @@ export function ScribeController({
               onClick={() => setExpanded(true)}
               className="ml-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary-700 hover:bg-primary-50"
             >
-              View
+              {t("view")}
             </button>
           )}
         </div>
@@ -318,7 +322,7 @@ export function ScribeController({
           <div className="flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-green-500" />
             <span className="text-xs font-medium text-gray-700">
-              {filledCount} fields filled
+              {t("fields_filled", { n: filledCount })}
             </span>
           </div>
           <button
@@ -327,7 +331,7 @@ export function ScribeController({
               setTranscriptMinimized(true);
             }}
             className="rounded p-1 text-gray-400 hover:bg-gray-100"
-            title="Minimize"
+            title={t("minimize")}
           >
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
@@ -338,7 +342,7 @@ export function ScribeController({
           {scribe.result?.transcript && (
             <div className="mb-3">
               <span className="text-[10px] font-medium text-gray-400 uppercase">
-                Transcript
+                {t("transcript")}
               </span>
               <p className="mt-1 text-xs leading-relaxed text-gray-600">
                 {scribe.result.transcript}
@@ -349,7 +353,7 @@ export function ScribeController({
           {scribe.result?.structuredData && (
             <div>
               <span className="text-[10px] font-medium text-gray-400 uppercase">
-                Extracted Values
+                {t("extracted_values")}
               </span>
               <div className="mt-1 space-y-1">
                 {Object.entries(scribe.result.structuredData).map(
@@ -396,7 +400,7 @@ export function ScribeController({
             onClick={handleDismiss}
             className="w-full rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
           >
-            Done
+            {t("done")}
           </button>
         </div>
       </div>
