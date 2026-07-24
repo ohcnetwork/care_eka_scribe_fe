@@ -234,75 +234,22 @@ function ScribeControllerInner({
           </div>
         )}
 
-        {/* PROCESSING — big "AI at work" card */}
+        {/* PROCESSING — text above orb, no card */}
         {scribe.status === "processing" && (
-          <div className="relative w-72 overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-2xl shadow-primary-700/10">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-primary-100 via-primary-100/60 to-transparent" />
-            {/* floating sparkles */}
-            <Sparkles className="ekascribe-float absolute top-4 left-5 h-3 w-3 text-primary-300" />
-            <Sparkles
-              className="ekascribe-float absolute top-8 right-6 h-2.5 w-2.5 text-primary-400"
-              style={{ animationDelay: "1s" }}
-            />
-            <div className="relative flex flex-col items-center px-5 pt-6 pb-5">
-              <AiPulse />
-              <p className="ekascribe-shimmer-text mt-4 text-sm font-bold">
-                {t("ai_analyzing")}
-              </p>
-              <p className="mt-1 text-center text-xs text-gray-400">
-                {t("ai_working_subtitle")}
-              </p>
-
-              {/* shimmer progress bar */}
-              <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-gray-100">
-                <div className="ekascribe-progress-track h-full w-full rounded-full" />
-              </div>
-
-              {/* cycling step list */}
-              <div className="mt-4 w-full space-y-1.5">
-                {PROCESSING_STEPS.map((step, i) => {
-                  const active = i === processingStep;
-                  const done = i < processingStep;
-                  return (
-                    <div
-                      key={step}
-                      className={cn(
-                        "flex items-center gap-2 rounded-lg px-2 py-1 text-xs transition-colors",
-                        active
-                          ? "bg-primary-100 font-medium text-primary-800"
-                          : "text-gray-400",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-4 w-4 items-center justify-center rounded-full",
-                          done && "bg-primary-500 text-white",
-                          active && "bg-primary-600 text-white",
-                          !active && !done && "bg-gray-200",
-                        )}
-                      >
-                        {done ? (
-                          <CheckCircle2 className="h-3 w-3" />
-                        ) : active ? (
-                          <VoiceBars className="size-3 text-white" />
-                        ) : null}
-                      </span>
-                      {t(step)}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {showTranscript && transcriptMinimized && (
-                <button
-                  onClick={() => setTranscriptMinimized(false)}
-                  className="mt-3 flex items-center gap-1 text-[11px] font-medium text-primary-700 hover:text-primary-800"
-                >
-                  <FileText className="h-3 w-3" />
-                  {t("show_transcript")}
-                </button>
-              )}
-            </div>
+          <div className="flex flex-col items-center gap-2">
+            <p className="ekascribe-shimmer-text text-xs font-medium">
+              {t(PROCESSING_STEPS[processingStep])}
+            </p>
+            <AiPulse />
+            {showTranscript && transcriptMinimized && (
+              <button
+                onClick={() => setTranscriptMinimized(false)}
+                className="flex items-center gap-1 text-[10px] font-medium text-primary-600 hover:text-primary-800"
+              >
+                <FileText className="h-2.5 w-2.5" />
+                {t("show_transcript")}
+              </button>
+            )}
           </div>
         )}
 
@@ -563,7 +510,7 @@ function AiPulse() {
             y2="40"
           >
             <stop offset="0%" stopColor="#31c48d" stopOpacity="0" />
-            <stop offset="100%" stopColor="#046c4e" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#0d9f6e" stopOpacity="0.9" />
           </linearGradient>
         </defs>
         <circle
@@ -593,8 +540,8 @@ function AiPulse() {
             x2="60"
             y2="32"
           >
-            <stop offset="0%" stopColor="white" stopOpacity="0" />
-            <stop offset="100%" stopColor="white" stopOpacity="0.6" />
+            <stop offset="0%" stopColor="#84e1bc" stopOpacity="0" />
+            <stop offset="100%" stopColor="#84e1bc" stopOpacity="0.85" />
           </linearGradient>
         </defs>
         <circle

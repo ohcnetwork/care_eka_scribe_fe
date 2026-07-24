@@ -91,6 +91,7 @@ export function useScribe({
   const sessionIdRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
+  const accumulatedRef = useRef<number>(0); // ms accumulated before the current segment
   const workerUrlRef = useRef<string | null>(null);
   const initPromiseRef = useRef<Promise<
     ReturnType<typeof getEkaScribeInstance>
@@ -223,14 +224,22 @@ export function useScribe({
   const startTimer = useCallback(() => {
     startTimeRef.current = Date.now();
     timerRef.current = setInterval(() => {
-      setDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      setDuration(
+        Math.floor(
+          (accumulatedRef.current + Date.now() - startTimeRef.current) / 1000,
+        ),
+      );
     }, 1000);
   }, []);
 
-  const stopTimer = useCallback(() => {
+  const stopTimer = useCallback((save = false) => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (save) {
+      // Preserve elapsed time so resume continues from here
+      accumulatedRef.current += Date.now() - startTimeRef.current;
     }
   }, []);
 
@@ -288,7 +297,7 @@ export function useScribe({
     const ekascribe = instanceRef.current;
     if (ekascribe) {
       ekascribe.pauseRecording();
-      stopTimer();
+      stopTimer(true); // save accumulated time before pausing
       updateStatus("paused");
     }
   }, [stopTimer, updateStatus]);
@@ -390,10 +399,12 @@ export function useScribe({
       const ekascribe = instanceRef.current;
       if (ekascribe) await ekascribe.cancelSession();
       stopTimer();
+      accumulatedRef.current = 0;
       setDuration(0);
       updateStatus("idle");
     } catch {
       stopTimer();
+      accumulatedRef.current = 0;
       updateStatus("idle");
     }
   }, [stopTimer, updateStatus]);
@@ -410,6 +421,7 @@ export function useScribe({
         workerUrlRef.current = null;
       }
       stopTimer();
+      accumulatedRef.current = 0;
       setDuration(0);
       setResult(null);
       setError(null);
