@@ -1,4 +1,7 @@
 {
+  "ai_analyzing": "Analyzing consultation",
+  "ai_scribe": "AI Scribe",
+  "ai_working_subtitle": "Structuring your clinical notes with AI",
   "applied": "Applied",
   "apply": "Apply",
   "apply_all": "Apply All",
@@ -7,11 +10,14 @@
   "dismiss": "Dismiss",
   "done": "Done",
   "extracted_values": "Extracted Values",
+  "extracting_details": "Extracting clinical details",
   "failed": "Failed",
   "fields_filled": "{{n}} fields filled",
   "filled_count": "✓ {{n}} filled",
+  "filling_form": "Auto-filling the form",
   "form_fields": "Form Fields",
   "generating_notes": "Generating medical notes...",
+  "listening": "Listening…",
   "listening_to_consultation": "Listening to consultation...",
   "minimize": "Minimize",
   "minimize_transcript": "Minimize transcript",
@@ -30,6 +36,7 @@
   "starting": "Starting…",
   "stop_and_process": "Stop & Process",
   "stop_recording": "Stop Recording",
+  "transcribing_audio": "Transcribing audio",
   "transcript": "Transcript",
   "view": "View"
 }

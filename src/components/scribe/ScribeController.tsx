@@ -1,11 +1,12 @@
 import {
-  CheckCircle,
+  CheckCircle2,
   ChevronDown,
   FileText,
   Loader2,
   Mic,
   Pause,
   Play,
+  Sparkles,
   Square,
   X,
 } from "lucide-react";
@@ -25,7 +26,25 @@ interface ScribeControllerProps {
 
 const FIELD_FILL_DELAY_MS = 500;
 
-export function ScribeController({
+const PROCESSING_STEPS = [
+  "transcribing_audio",
+  "extracting_details",
+  "filling_form",
+] as const;
+
+export function ScribeController(props: ScribeControllerProps) {
+  // Tailwind utilities in this plugin are scoped under
+  // `.care-eka-scribe-fe-container` (see index.css). The rendered output must
+  // live inside that container for classes (fixed positioning, gradients, etc.)
+  // and theme tokens to apply.
+  return (
+    <div className="care-eka-scribe-fe-container">
+      <ScribeControllerInner {...props} />
+    </div>
+  );
+}
+
+function ScribeControllerInner({
   formState,
   setFormState,
 }: ScribeControllerProps) {
@@ -105,6 +124,13 @@ export function ScribeController({
     },
   });
 
+  // Open the results view automatically once transcription/processing finishes
+  useEffect(() => {
+    if (scribe.status === "completed") {
+      setExpanded(true);
+    }
+  }, [scribe.status]);
+
   const handleStart = async () => {
     clearFillTimeouts();
     appliedRef.current = false;
@@ -131,197 +157,285 @@ export function ScribeController({
   const secs = duration % 60;
   const timeStr = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 
-  // Idle state — show FAB
+  // Idle state — floating pill FAB (bottom-right)
   if (scribe.status === "idle") {
     return (
-      <button
-        onClick={handleStart}
-        disabled={scribe.isStarting}
-        className={cn(
-          "fixed right-6 bottom-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-primary-700 text-white shadow-lg transition-transform",
-          scribe.isStarting ? "cursor-wait opacity-90" : "hover:scale-105",
-        )}
-        title={scribe.isStarting ? t("starting") : t("start_ai_scribe")}
-      >
-        {scribe.isStarting ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
-        ) : (
-          <Mic className="h-5 w-5" />
-        )}
-      </button>
+      <div className="ekascribe-pop-in fixed right-4 bottom-4 z-9999 sm:right-6 sm:bottom-6">
+        <button
+          onClick={handleStart}
+          disabled={scribe.isStarting}
+          className={cn(
+            "group relative flex items-center gap-2 overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 py-3 pr-5 pl-4 text-white shadow-lg shadow-primary-700/30 transition-all",
+            scribe.isStarting
+              ? "opacity-90"
+              : "hover:shadow-xl hover:shadow-primary-700/40 hover:brightness-110 active:scale-95",
+          )}
+          title={scribe.isStarting ? t("starting") : t("start_ai_scribe")}
+        >
+          {/* soft rotating glow */}
+          <span className="ekascribe-spin-slow pointer-events-none absolute -inset-16 scale-150 rounded-full bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.35),transparent)] opacity-60" />
+          <span className="relative flex h-6 w-6 items-center justify-center">
+            {scribe.isStarting ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Mic className="h-5 w-5" />
+            )}
+          </span>
+          <span className="relative text-sm font-semibold">
+            {scribe.isStarting ? t("starting") : t("ai_scribe")}
+          </span>
+          <Sparkles className="relative h-4 w-4 opacity-80" />
+        </button>
+      </div>
     );
   }
 
-  // Compact pill (default view while recording/processing/completed)
-  if (!expanded) {
-    const transcript = liveTranscript || scribe.result?.transcript || "";
-    const showTranscript =
-      transcript &&
-      (scribe.status === "processing" || scribe.status === "completed");
+  const transcript = liveTranscript || scribe.result?.transcript || "";
+  const showTranscript =
+    transcript &&
+    (scribe.status === "processing" || scribe.status === "completed");
 
+  // Real processing progress, derived from actual API signals (not a timer):
+  //  0 = transcribing audio  (recording ended, no transcript yet)
+  //  1 = extracting details  (transcript received, structuring templates)
+  //  2 = filling the form    (structured result received / completed)
+  const processingStep = scribe.status === "completed" ? 2 : transcript ? 1 : 0;
+
+  // Compact / status views (recording, processing, completed, failed)
+  if (!expanded) {
     return (
-      <div className="fixed right-6 bottom-6 z-50 flex flex-col items-end gap-2">
-        {/* Transcript box — can be minimized without dismissing */}
+      <div className="ekascribe-pop-in fixed right-4 bottom-4 z-9999 flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
+        {/* Live transcript — collapsible, shown while processing/completed */}
         {showTranscript && !transcriptMinimized && (
-          <div className="w-72 rounded-lg border border-gray-200 bg-white p-2.5 shadow-md">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[10px] font-medium text-gray-400 uppercase">
+          <div className="w-72 overflow-hidden rounded-2xl border border-gray-100 bg-white/95 shadow-xl backdrop-blur">
+            <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-gray-500 uppercase">
+                <FileText className="h-3 w-3" />
                 {t("transcript")}
               </span>
               <div className="flex items-center gap-1">
                 {scribe.status === "completed" && (
-                  <span className="text-[10px] font-medium text-green-600">
+                  <span className="text-[10px] font-semibold text-primary-700">
                     {t("filled_count", { n: filledCount })}
                   </span>
                 )}
                 <button
                   onClick={() => setTranscriptMinimized(true)}
-                  className="rounded p-0.5 text-gray-400 hover:bg-gray-100"
+                  className="rounded-md p-0.5 text-gray-400 hover:bg-gray-100"
                   title={t("minimize_transcript")}
                 >
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-            <p className="max-h-24 overflow-y-auto text-xs leading-relaxed text-gray-600">
+            <p className="max-h-28 overflow-y-auto px-3 py-2.5 text-xs leading-relaxed text-gray-600">
               {transcript}
             </p>
           </div>
         )}
 
-        {/* Pill */}
-        <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-1.5 shadow-lg">
-          {/* Status dot */}
-          <span
+        {/* PROCESSING — big "AI at work" card */}
+        {scribe.status === "processing" && (
+          <div className="relative w-72 overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-2xl shadow-primary-700/10">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-primary-100 via-primary-100/60 to-transparent" />
+            {/* floating sparkles */}
+            <Sparkles className="ekascribe-float absolute top-4 left-5 h-3 w-3 text-primary-300" />
+            <Sparkles
+              className="ekascribe-float absolute top-8 right-6 h-2.5 w-2.5 text-primary-400"
+              style={{ animationDelay: "1s" }}
+            />
+            <div className="relative flex flex-col items-center px-5 pt-6 pb-5">
+              <AiPulse />
+              <p className="ekascribe-shimmer-text mt-4 text-sm font-bold">
+                {t("ai_analyzing")}
+              </p>
+              <p className="mt-1 text-center text-xs text-gray-400">
+                {t("ai_working_subtitle")}
+              </p>
+
+              {/* shimmer progress bar */}
+              <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-gray-100">
+                <div className="ekascribe-progress-track h-full w-full rounded-full" />
+              </div>
+
+              {/* cycling step list */}
+              <div className="mt-4 w-full space-y-1.5">
+                {PROCESSING_STEPS.map((step, i) => {
+                  const active = i === processingStep;
+                  const done = i < processingStep;
+                  return (
+                    <div
+                      key={step}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg px-2 py-1 text-xs transition-colors",
+                        active
+                          ? "bg-primary-100 font-medium text-primary-800"
+                          : "text-gray-400",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 items-center justify-center rounded-full",
+                          done && "bg-primary-500 text-white",
+                          active && "bg-primary-600 text-white",
+                          !active && !done && "bg-gray-200",
+                        )}
+                      >
+                        {done ? (
+                          <CheckCircle2 className="h-3 w-3" />
+                        ) : active ? (
+                          <VoiceBars className="size-3 text-white" />
+                        ) : null}
+                      </span>
+                      {t(step)}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {showTranscript && transcriptMinimized && (
+                <button
+                  onClick={() => setTranscriptMinimized(false)}
+                  className="mt-3 flex items-center gap-1 text-[11px] font-medium text-primary-700 hover:text-primary-800"
+                >
+                  <FileText className="h-3 w-3" />
+                  {t("show_transcript")}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* RECORDING / PAUSED — live pill */}
+        {(scribe.status === "recording" || scribe.status === "paused") && (
+          <div
             className={cn(
-              "h-2 w-2 shrink-0 rounded-full",
-              scribe.status === "recording" && "animate-pulse bg-red-500",
-              scribe.status === "paused" && "bg-amber-500",
-              scribe.status === "processing" && "animate-pulse bg-blue-500",
-              scribe.status === "completed" && "bg-green-500",
-              scribe.status === "failed" && "bg-red-500",
+              "flex items-center gap-3 rounded-full border bg-white py-2 pr-2 pl-4 shadow-xl",
+              scribe.status === "recording"
+                ? "border-red-100"
+                : "border-amber-100",
             )}
-          />
-
-          {/* Timer */}
-          {(scribe.status === "recording" || scribe.status === "paused") && (
-            <span className="font-mono text-xs font-medium text-gray-700">
-              {timeStr}
-            </span>
-          )}
-
-          {scribe.status === "processing" && (
-            <span className="text-xs text-gray-500">{t("processing")}</span>
-          )}
-
-          {scribe.status === "completed" && (
-            <span className="text-xs font-medium text-green-700">
-              {t("done")}
-            </span>
-          )}
-
-          {scribe.status === "failed" && (
-            <span className="text-xs text-red-500">{t("failed")}</span>
-          )}
-
-          {/* Inline controls */}
-          {scribe.status === "recording" && (
-            <>
-              <button
-                onClick={scribe.pauseRecording}
-                className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-                title={t("pause")}
-              >
-                <Pause className="h-3 w-3" />
-              </button>
-              <button
-                onClick={handleStop}
-                className="rounded-full p-1 text-red-500 hover:bg-red-50"
-                title={t("stop_and_process")}
-              >
-                <Square className="h-3 w-3" />
-              </button>
-            </>
-          )}
-
-          {scribe.status === "paused" && (
-            <>
-              <button
-                onClick={scribe.resumeRecording}
-                className="rounded-full p-1 text-primary-600 hover:bg-primary-50"
-                title={t("resume")}
-              >
-                <Play className="h-3 w-3" />
-              </button>
-              <button
-                onClick={handleStop}
-                className="rounded-full p-1 text-red-500 hover:bg-red-50"
-                title={t("stop_and_process")}
-              >
-                <Square className="h-3 w-3" />
-              </button>
-            </>
-          )}
-
-          {scribe.status === "processing" && (
-            <>
-              <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-              {showTranscript && transcriptMinimized && (
-                <button
-                  onClick={() => setTranscriptMinimized(false)}
-                  className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-                  title={t("show_transcript")}
-                >
-                  <FileText className="h-3 w-3" />
-                </button>
+          >
+            <div
+              className={cn(
+                "flex items-center gap-2",
+                scribe.status === "recording"
+                  ? "text-red-500"
+                  : "text-amber-500",
               )}
-            </>
-          )}
-
-          {scribe.status === "completed" && (
-            <>
-              {showTranscript && transcriptMinimized && (
-                <button
-                  onClick={() => setTranscriptMinimized(false)}
-                  className="rounded-full p-1 text-gray-500 hover:bg-gray-100"
-                  title={t("show_transcript")}
-                >
-                  <FileText className="h-3 w-3" />
-                </button>
+            >
+              {scribe.status === "recording" ? (
+                <VoiceBars />
+              ) : (
+                <Pause className="h-4 w-4" />
               )}
-              <button
-                onClick={handleDismiss}
-                className="rounded-full p-1 text-gray-400 hover:bg-gray-100"
-                title={t("dismiss")}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </>
-          )}
+              <span className="font-mono text-sm font-semibold text-gray-800">
+                {timeStr}
+              </span>
+            </div>
 
-          {/* Expand button */}
-          {(scribe.status === "completed" || scribe.status === "failed") && (
+            {scribe.status === "recording" && (
+              <>
+                <button
+                  onClick={scribe.pauseRecording}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100"
+                  title={t("pause")}
+                >
+                  <Pause className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleStop}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
+                  title={t("stop_and_process")}
+                >
+                  <Square className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+
+            {scribe.status === "paused" && (
+              <>
+                <button
+                  onClick={scribe.resumeRecording}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-700 text-white transition-colors hover:bg-primary-800"
+                  title={t("resume")}
+                >
+                  <Play className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleStop}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
+                  title={t("stop_and_process")}
+                >
+                  <Square className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* COMPLETED — success pill */}
+        {scribe.status === "completed" && (
+          <div className="flex items-center gap-2 rounded-full border border-primary-100 bg-white py-2 pr-2 pl-3 shadow-xl">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-600 text-white">
+              <CheckCircle2 className="h-4 w-4" />
+            </span>
+            <span className="text-sm font-semibold text-primary-800">
+              {t("filled_count", { n: filledCount })}
+            </span>
             <button
               onClick={() => setExpanded(true)}
-              className="ml-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary-700 hover:bg-primary-50"
+              className="rounded-full px-3 py-1 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"
             >
               {t("view")}
             </button>
-          )}
-        </div>
+            <button
+              onClick={handleDismiss}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100"
+              title={t("dismiss")}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        {/* FAILED — error pill */}
+        {scribe.status === "failed" && (
+          <div className="flex items-center gap-2 rounded-full border border-red-100 bg-white py-2 pr-2 pl-3 shadow-xl">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
+            <span className="text-sm font-medium text-red-600">
+              {t("failed")}
+            </span>
+            <button
+              onClick={() => setExpanded(true)}
+              className="rounded-full px-3 py-1 text-xs font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+            >
+              {t("view")}
+            </button>
+            <button
+              onClick={handleDismiss}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100"
+              title={t("dismiss")}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     );
   }
 
   // Expanded view — show transcript & results
   return (
-    <div className="fixed right-6 bottom-6 z-50 w-80">
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
+    <div className="ekascribe-pop-in fixed right-4 bottom-4 z-9999 w-80 sm:right-6 sm:bottom-6">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+        <div className="flex items-center justify-between border-b border-gray-100 bg-linear-to-r from-primary-100 to-transparent px-3 py-2.5">
           <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-green-500" />
-            <span className="text-xs font-medium text-gray-700">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary-600 text-white">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-xs font-semibold text-gray-700">
               {t("fields_filled", { n: filledCount })}
             </span>
           </div>
@@ -403,6 +517,102 @@ export function ScribeController({
             {t("done")}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// --- AI animation sub-components ---
+
+/** Live equalizer voice bars (inherits color via `currentColor`). */
+function VoiceBars({ className }: { className?: string }) {
+  return (
+    <span className={cn("flex h-4 items-end gap-0.5", className)}>
+      {[0, 1, 2, 3, 4].map((i) => (
+        <span
+          key={i}
+          className="ekascribe-bar w-0.5 rounded-full bg-current"
+          style={{ height: "100%", animationDelay: `${i * 0.12}s` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** Premium AI processing indicator — two counter-rotating gradient arc
+ *  "comets" around a glowing core. No dependencies, care green palette. */
+function AiPulse() {
+  return (
+    <div className="relative flex h-20 w-20 items-center justify-center">
+      {/* ambient glow */}
+      <span className="ekascribe-glow absolute h-14 w-14 rounded-full bg-primary-400/30 blur-xl" />
+
+      {/* outer arc — slow clockwise comet */}
+      <svg
+        className="ekascribe-spin-slow absolute inset-0 h-full w-full"
+        viewBox="0 0 80 80"
+        fill="none"
+      >
+        <defs>
+          <linearGradient
+            id="ekascribe-arc-outer"
+            gradientUnits="userSpaceOnUse"
+            x1="4"
+            y1="40"
+            x2="76"
+            y2="40"
+          >
+            <stop offset="0%" stopColor="#31c48d" stopOpacity="0" />
+            <stop offset="100%" stopColor="#046c4e" stopOpacity="0.9" />
+          </linearGradient>
+        </defs>
+        <circle
+          cx="40"
+          cy="40"
+          r="36"
+          stroke="url(#ekascribe-arc-outer)"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeDasharray="158 68"
+        />
+      </svg>
+
+      {/* inner arc — faster counter-clockwise comet */}
+      <svg
+        className="absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)]"
+        style={{ animation: "ekascribe-spin 2.6s linear infinite reverse" }}
+        viewBox="0 0 64 64"
+        fill="none"
+      >
+        <defs>
+          <linearGradient
+            id="ekascribe-arc-inner"
+            gradientUnits="userSpaceOnUse"
+            x1="4"
+            y1="32"
+            x2="60"
+            y2="32"
+          >
+            <stop offset="0%" stopColor="white" stopOpacity="0" />
+            <stop offset="100%" stopColor="white" stopOpacity="0.6" />
+          </linearGradient>
+        </defs>
+        <circle
+          cx="32"
+          cy="32"
+          r="28"
+          stroke="url(#ekascribe-arc-inner)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray="110 66"
+        />
+      </svg>
+
+      {/* blinking blurry star core */}
+      <div className="relative z-10 flex h-8 w-8 items-center justify-center">
+        {/* soft glow behind the star */}
+        <span className="ekascribe-orb absolute h-8 w-8 rounded-full bg-primary-400/50 blur-md" />
+        <Sparkles className="ekascribe-star-blink relative h-5 w-5 text-white drop-shadow-[0_0_6px_#31c48d]" />
       </div>
     </div>
   );

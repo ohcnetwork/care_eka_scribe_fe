@@ -42,3 +42,315 @@
   outline-offset: 2px;
   transition: background-color 0.3s ease;
 }
+
+/* ───────────────────────────────────────────────────────────
+   AI Scribe — floating panel motion system
+   ─────────────────────────────────────────────────────────── */
+
+/* Panel entrance */
+@keyframes ekascribe-pop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.ekascribe-pop-in {
+  animation: ekascribe-pop-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Slow rotating conic ring around the AI orb */
+@keyframes ekascribe-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ekascribe-spin-slow {
+  animation: ekascribe-spin 5s linear infinite;
+}
+
+/* Breathing orb glow */
+@keyframes ekascribe-orb {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+.ekascribe-orb {
+  animation: ekascribe-orb 2.2s ease-in-out infinite;
+}
+
+/* Expanding halo rings emitted from the orb */
+@keyframes ekascribe-halo {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+.ekascribe-halo {
+  animation: ekascribe-halo 2.4s ease-out infinite;
+}
+
+/* Shimmering gradient sweep for text + progress bar */
+@keyframes ekascribe-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.ekascribe-shimmer-text {
+  background: linear-gradient(
+    100deg,
+    #046c4e 0%,
+    #0d9f6e 25%,
+    #31c48d 50%,
+    #0d9f6e 75%,
+    #046c4e 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ekascribe-shimmer 2.4s linear infinite;
+}
+.ekascribe-progress-track {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #0d9f6e 40%,
+    #057a55 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: ekascribe-shimmer 1.6s linear infinite;
+}
+
+/* Live equalizer / voice bars */
+@keyframes ekascribe-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.ekascribe-bar {
+  transform-origin: center bottom;
+  animation: ekascribe-bar 0.9s ease-in-out infinite;
+}
+
+/* Premium audio waveform used in the processing card */
+@keyframes ekascribe-wave {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.ekascribe-wave {
+  transform-origin: center;
+  animation: ekascribe-wave 1.2s ease-in-out infinite;
+}
+
+/* Soft breathing glow behind the waveform */
+@keyframes ekascribe-glow {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.6;
+  }
+}
+.ekascribe-glow {
+  animation: ekascribe-glow 2.6s ease-in-out infinite;
+}
+
+/* Morphing gradient AI core (premium processing visual) */
+@keyframes ekascribe-blob {
+  0%,
+  100% {
+    border-radius: 42% 58% 63% 37% / 42% 43% 57% 58%;
+    transform: rotate(0deg) scale(1);
+  }
+  33% {
+    border-radius: 63% 37% 45% 55% / 55% 48% 52% 45%;
+    transform: rotate(120deg) scale(1.06);
+  }
+  66% {
+    border-radius: 40% 60% 54% 46% / 49% 60% 40% 51%;
+    transform: rotate(240deg) scale(0.97);
+  }
+}
+.ekascribe-blob {
+  animation: ekascribe-blob 6s ease-in-out infinite;
+}
+
+/* Counter-rotating orbiting particles */
+@keyframes ekascribe-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ekascribe-orbit {
+  animation: ekascribe-orbit 4s linear infinite;
+}
+.ekascribe-orbit-reverse {
+  animation: ekascribe-orbit 5s linear infinite reverse;
+}
+
+/* Emanating sonar rings */
+@keyframes ekascribe-ripple {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+.ekascribe-ripple {
+  animation: ekascribe-ripple 2.4s ease-out infinite;
+}
+
+/* Liquid-gradient orb — gentle breathing of the whole sphere */
+@keyframes ekascribe-orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+.ekascribe-orb-breathe {
+  animation: ekascribe-orb-breathe 4s ease-in-out infinite;
+}
+
+/* Siri-style translucent color sheets — opacity dims and blooms independently */
+@keyframes ekascribe-siri-a {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+@keyframes ekascribe-siri-b {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 0.08;
+  }
+}
+@keyframes ekascribe-siri-c {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  33% {
+    opacity: 0;
+  }
+  66% {
+    opacity: 0.9;
+  }
+}
+.ekascribe-siri-a {
+  animation: ekascribe-siri-a 3.6s ease-in-out infinite;
+}
+.ekascribe-siri-b {
+  animation: ekascribe-siri-b 5s ease-in-out infinite;
+}
+.ekascribe-siri-c {
+  animation: ekascribe-siri-c 4.3s ease-in-out infinite;
+}
+
+/* Blinking blur star in the center of the AI spinner */
+@keyframes ekascribe-star-blink {
+  0%,
+  100% {
+    opacity: 1;
+    filter: blur(0px) drop-shadow(0 0 6px #31c48d);
+    transform: scale(1) rotate(0deg);
+  }
+  40% {
+    opacity: 0.15;
+    filter: blur(3px) drop-shadow(0 0 2px #31c48d);
+    transform: scale(0.7) rotate(30deg);
+  }
+  70% {
+    opacity: 0.9;
+    filter: blur(1px) drop-shadow(0 0 10px #0d9f6e);
+    transform: scale(1.15) rotate(-10deg);
+  }
+}
+.ekascribe-star-blink {
+  animation: ekascribe-star-blink 2s ease-in-out infinite;
+}
+
+@keyframes ekascribe-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+.ekascribe-float {
+  animation: ekascribe-float 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ekascribe-pop-in,
+  .ekascribe-spin-slow,
+  .ekascribe-orb,
+  .ekascribe-halo,
+  .ekascribe-shimmer-text,
+  .ekascribe-progress-track,
+  .ekascribe-bar,
+  .ekascribe-wave,
+  .ekascribe-glow,
+  .ekascribe-blob,
+  .ekascribe-orbit,
+  .ekascribe-orbit-reverse,
+  .ekascribe-ripple,
+  .ekascribe-orb-breathe,
+  .ekascribe-siri-a,
+  .ekascribe-siri-b,
+  .ekascribe-siri-c,
+  .ekascribe-star-blink,
+  .ekascribe-float {
+    animation: none !important;
+  }
+}
