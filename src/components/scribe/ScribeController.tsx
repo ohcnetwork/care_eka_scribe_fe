@@ -281,7 +281,7 @@ function ScribeControllerInner({
                 {[0, 1, 2, 3, 4].map((i) => (
                   <span
                     key={i}
-                    className="ekascribe-bar w-0.5 rounded-full bg-white"
+                    className="ekascribe-bar w-0.5 rounded-full bg-white/85"
                     style={{ height: "100%", animationDelay: `${i * 0.12}s` }}
                   />
                 ))}
