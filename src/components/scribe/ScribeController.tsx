@@ -253,71 +253,70 @@ function ScribeControllerInner({
           </div>
         )}
 
-        {/* RECORDING / PAUSED — live pill */}
-        {(scribe.status === "recording" || scribe.status === "paused") && (
-          <div
-            className={cn(
-              "flex items-center gap-3 rounded-full border bg-white py-2 pr-2 pl-4 shadow-xl",
-              scribe.status === "recording"
-                ? "border-red-100"
-                : "border-amber-100",
-            )}
-          >
-            <div
-              className={cn(
-                "flex items-center gap-2",
-                scribe.status === "recording"
-                  ? "text-red-500"
-                  : "text-amber-500",
-              )}
-            >
-              {scribe.status === "recording" ? (
-                <VoiceBars />
-              ) : (
-                <Pause className="h-4 w-4" />
-              )}
-              <span className="font-mono text-sm font-semibold text-gray-800">
+        {/* RECORDING — same size/position as processing orb for seamless transition */}
+        {scribe.status === "recording" && (
+          <div className="flex flex-col items-center gap-2 pr-4">
+            {/* timer + pause button inline */}
+            <div className="flex items-center gap-1.5">
+              <span className="ekascribe-shimmer-text text-xs font-medium">
                 {timeStr}
               </span>
+              <button
+                onClick={scribe.pauseRecording}
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200"
+                title={t("pause")}
+              >
+                <Pause className="h-2.5 w-2.5" />
+              </button>
             </div>
+            <button
+              onClick={handleStop}
+              title={t("stop_and_process")}
+              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 shadow-lg shadow-primary-700/40 transition-all active:scale-95 hover:shadow-xl hover:shadow-primary-700/50"
+            >
+              {/* rotating conic glow */}
+              <span className="ekascribe-spin-slow pointer-events-none absolute -inset-10 rounded-full bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.3),transparent)] opacity-50" />
+              {/* voice bars */}
+              <span className="relative flex h-6 items-end gap-0.5 transition-opacity group-hover:opacity-0">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <span
+                    key={i}
+                    className="ekascribe-bar w-0.5 rounded-full bg-white/85"
+                    style={{ height: "100%", animationDelay: `${i * 0.12}s` }}
+                  />
+                ))}
+              </span>
+              {/* stop icon on hover */}
+              <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                <Square className="h-5 w-5 text-white" />
+              </span>
+            </button>
+          </div>
+        )}
 
-            {scribe.status === "recording" && (
-              <>
-                <button
-                  onClick={scribe.pauseRecording}
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100"
-                  title={t("pause")}
-                >
-                  <Pause className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={handleStop}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
-                  title={t("stop_and_process")}
-                >
-                  <Square className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-
-            {scribe.status === "paused" && (
-              <>
-                <button
-                  onClick={scribe.resumeRecording}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-700 text-white transition-colors hover:bg-primary-800"
-                  title={t("resume")}
-                >
-                  <Play className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={handleStop}
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
-                  title={t("stop_and_process")}
-                >
-                  <Square className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
+        {/* PAUSED — resume near timer; stop on orb hover */}
+        {scribe.status === "paused" && (
+          <div className="flex flex-col items-center gap-2 pr-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-amber-500">
+                {timeStr}
+              </span>
+              <button
+                onClick={scribe.resumeRecording}
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-white transition-colors hover:bg-primary-700"
+                title={t("resume")}
+              >
+                <Play className="h-2.5 w-2.5" />
+              </button>
+            </div>
+            <button
+              onClick={handleStop}
+              title={t("stop_and_process")}
+              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 opacity-50 shadow-lg shadow-primary-700/30 transition-all hover:opacity-100 active:scale-95"
+            >
+              <Pause className="relative h-6 w-6 text-white transition-opacity group-hover:opacity-0" />
+              <Square className="absolute h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+            </button>
           </div>
         )}
 
@@ -472,7 +471,8 @@ function ScribeControllerInner({
 // --- AI animation sub-components ---
 
 /** Live equalizer voice bars (inherits color via `currentColor`). */
-function VoiceBars({ className }: { className?: string }) {
+/** @deprecated No longer used — kept for potential future reuse. */
+function _VoiceBars({ className }: { className?: string }) {
   return (
     <span className={cn("flex h-4 items-end gap-0.5", className)}>
       {[0, 1, 2, 3, 4].map((i) => (
