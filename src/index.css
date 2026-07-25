@@ -150,7 +150,7 @@
   }
 }
 .ekascribe-bar {
-  transform-origin: center bottom;
+  transform-origin: center;
   animation: ekascribe-bar 0.9s ease-in-out infinite;
 }
 

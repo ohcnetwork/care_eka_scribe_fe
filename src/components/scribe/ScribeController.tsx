@@ -131,6 +131,84 @@ function ScribeControllerInner({
     }
   }, [scribe.status]);
 
+  // ── Live audio level visualiser ──────────────────────────────────────────
+  // Opens a lightweight Web Audio analyser directly against the mic whenever
+  // recording is active. Independent of the SDK's own recording stream.
+  const [barHeights, setBarHeights] = useState<number[]>([
+    0.3, 0.3, 0.3, 0.3, 0.3,
+  ]);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const vizStreamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    if (scribe.status !== "recording") {
+      // tear down
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      audioCtxRef.current?.close();
+      audioCtxRef.current = null;
+      vizStreamRef.current?.getTracks().forEach((t) => t.stop());
+      vizStreamRef.current = null;
+      setBarHeights([0.3, 0.3, 0.3, 0.3, 0.3]);
+      return;
+    }
+
+    let cancelled = false;
+
+    navigator.mediaDevices
+      .getUserMedia({ audio: true, video: false })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        vizStreamRef.current = stream;
+
+        const ctx = new AudioContext();
+        audioCtxRef.current = ctx;
+
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.75;
+        ctx.createMediaStreamSource(stream).connect(analyser);
+
+        const freqData = new Uint8Array(analyser.frequencyBinCount); // 128 bins
+        // Sample 5 bins across the 200–3 000 Hz speech band
+        // bin index ≈ freq * fftSize / sampleRate
+        const sampleRate = ctx.sampleRate;
+        const binOf = (hz: number) =>
+          Math.round((hz * analyser.fftSize) / sampleRate);
+        const bins = [
+          binOf(250),
+          binOf(500),
+          binOf(900),
+          binOf(1600),
+          binOf(2800),
+        ];
+
+        const tick = () => {
+          analyser.getByteFrequencyData(freqData);
+          setBarHeights(
+            bins.map((b) => Math.max(0.12, (freqData[b] ?? 0) / 255)),
+          );
+          animFrameRef.current = requestAnimationFrame(tick);
+        };
+        animFrameRef.current = requestAnimationFrame(tick);
+      })
+      .catch(() => {
+        /* mic permission denied – CSS fallback stays */
+      });
+
+    return () => {
+      cancelled = true;
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      audioCtxRef.current?.close();
+      audioCtxRef.current = null;
+      vizStreamRef.current?.getTracks().forEach((t) => t.stop());
+      vizStreamRef.current = null;
+    };
+  }, [scribe.status]);
+
   const handleStart = async () => {
     clearFillTimeouts();
     appliedRef.current = false;
@@ -266,23 +344,23 @@ function ScribeControllerInner({
                 className="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition-colors hover:bg-gray-200"
                 title={t("pause")}
               >
-                <Pause className="h-2.5 w-2.5" />
+                <Pause className="h-2.5 w-2.5 blur-lg" />
               </button>
             </div>
             <button
               onClick={handleStop}
               title={t("stop_and_process")}
-              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 shadow-lg shadow-primary-700/40 transition-all active:scale-95 hover:shadow-xl hover:shadow-primary-700/50"
+              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 shadow-lg shadow-primary-700/40 transition-all active:scale-95 hover:shadow-xl hover:shadow-primary-700/50 opacity-85 blur-lg hover:opacity-100"
             >
               {/* rotating conic glow */}
               <span className="ekascribe-spin-slow pointer-events-none absolute -inset-10 rounded-full bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.3),transparent)] opacity-50" />
-              {/* voice bars */}
-              <span className="relative flex h-6 items-end gap-0.5 transition-opacity group-hover:opacity-0">
-                {[0, 1, 2, 3, 4].map((i) => (
+              {/* live audio bars — height driven by Web Audio AnalyserNode */}
+              <span className="relative flex h-6 items-center gap-0.5 transition-opacity group-hover:opacity-0">
+                {barHeights.map((h, i) => (
                   <span
                     key={i}
-                    className="ekascribe-bar w-0.5 rounded-full bg-white/85"
-                    style={{ height: "100%", animationDelay: `${i * 0.12}s` }}
+                    className="w-0.5 rounded-full bg-white/85 transition-[height] duration-75 blur-2xl"
+                    style={{ height: `${h * 100}%` }}
                   />
                 ))}
               </span>
@@ -303,7 +381,7 @@ function ScribeControllerInner({
               </span>
               <button
                 onClick={scribe.resumeRecording}
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-white transition-colors hover:bg-primary-700"
+                className="flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-white transition-colors hover:bg-primary-700 opacity-90"
                 title={t("resume")}
               >
                 <Play className="h-2.5 w-2.5" />
@@ -312,7 +390,7 @@ function ScribeControllerInner({
             <button
               onClick={handleStop}
               title={t("stop_and_process")}
-              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 opacity-50 shadow-lg shadow-primary-700/30 transition-all hover:opacity-100 active:scale-95"
+              className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 opacity-85 shadow-lg shadow-primary-700/30 transition-all hover:opacity-100 active:scale-95"
             >
               <Pause className="relative h-6 w-6 text-white transition-opacity group-hover:opacity-0" />
               <Square className="absolute h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
@@ -492,7 +570,7 @@ function AiPulse() {
   return (
     <div className="relative flex h-20 w-20 items-center justify-center">
       {/* ambient glow */}
-      <span className="ekascribe-glow absolute h-14 w-14 rounded-full bg-primary-400/30 blur-xl" />
+      <span className="ekascribe-glow absolute h-14 w-14 rounded-full bg-primary-400/40 blur-xl" />
 
       {/* outer arc — slow clockwise comet */}
       <svg
