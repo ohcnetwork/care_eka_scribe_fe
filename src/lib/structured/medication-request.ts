@@ -100,7 +100,6 @@ async function resolveMedicine(
     const product = await searchProductKnowledge(names, facilityId);
     if (product) {
       return {
-        medication: product.code,
         requested_product: product.id,
         requested_product_internal: product,
         defaultUnit: product.base_unit,
@@ -321,7 +320,9 @@ export async function deserializeMedicationRequests(
             validateEnum(row.priority, MEDICATION_PRIORITIES, "routine") ??
             "routine",
           do_not_perform: false,
-          medication: resolved.medication,
+          ...(resolved.requested_product
+            ? {}
+            : { medication: resolved.medication }),
           requested_product: resolved.requested_product,
           requested_product_internal: resolved.requested_product_internal,
           authored_on: authoredOn,
