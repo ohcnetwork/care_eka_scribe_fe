@@ -143,6 +143,7 @@ export function buildTemplateDescription(fields: FormField[]): {
       "Extract medical data from the consultation as a JSON object.",
       "Only include fields explicitly mentioned in the conversation.",
       "NEVER fabricate or assume values not stated.",
+      "Always write all values in ENGLISH, translating from any other spoken language. Keep drug brand names, proper nouns, and medical codes as-is.",
       "Use exact key names as shown below.",
       "",
       "For each field, if the clinician adds commentary (e.g. 'heart rate is 99 which is normal'),",
@@ -165,7 +166,7 @@ export function buildTemplateDescription(fields: FormField[]): {
 }
 
 const TEMPLATE_CACHE_KEY = "ekascribe_template_cache";
-const TEMPLATE_CACHE_VERSION = 10;
+const TEMPLATE_CACHE_VERSION = 12;
 
 interface CachedTemplate {
   slug: string;

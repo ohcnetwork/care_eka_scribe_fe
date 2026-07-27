@@ -1,21 +1,97 @@
 import {
   type EkaScribeConfig,
+  type GetSessionStatusResponse,
   createWorkerBlobUrl,
   getEkaScribeInstance,
 } from "@eka-care/ekascribe-ts-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getOrCreateTemplate } from "@/lib/template-builder";
+import {
+  buildTemplateDescription,
+  extractFormFields,
+  getOrCreateTemplate,
+} from "@/lib/template-builder";
 import type { ScribeResult, ScribeStatus } from "@/lib/types/scribe";
 
 const EKA_ENV = (import.meta.env.REACT_EKA_ENV || "DEV") as "PROD" | "DEV";
 const EKA_ACCESS_TOKEN = import.meta.env.REACT_EKA_ACCESS_TOKEN || "";
-const EKA_BASE_URL =
-  EKA_ENV === "DEV"
-    ? "https://api.dev.eka.care/voice/v1"
-    : "https://api.eka.care/voice/v1";
-const SESSION_POLL_INTERVAL_MS = 2000;
-const SESSION_POLL_MAX_ATTEMPTS = 60;
+
+// Spoken language hint, comma-separated ISO codes (e.g. "ta" or "ta,en").
+// Forcing the language avoids per-chunk auto-detection flip-flopping on
+// code-switched speech (e.g. Tamil consultation with English drug names).
+const SCRIBE_LANGUAGES: string[] = (
+  import.meta.env.REACT_SCRIBE_LANGUAGES || "auto_detect"
+)
+  .split(",")
+  .map((code: string) => code.trim())
+  .filter(Boolean);
+
+// Scribe backend resolution (in priority order):
+// 1. REACT_SCRIBE_BE_URL env — explicit override (standalone FastAPI server)
+// 2. window.CARE_API_URL + /api/care_scribe_be — CARE backend plugin, same
+//    origin/auth as the rest of the CARE API (care_scribe_fe convention)
+// 3. Eka Care cloud — fallback when neither is available
+const SCRIBE_BE_OVERRIDE = (import.meta.env.REACT_SCRIBE_BE_URL || "").replace(
+  /\/$/,
+  "",
+);
+
+function resolveScribeBackend(): { baseUrl: string; custom: boolean } {
+  if (SCRIBE_BE_OVERRIDE) {
+    return { baseUrl: `${SCRIBE_BE_OVERRIDE}/v1`, custom: true };
+  }
+  const careApiUrl =
+    typeof window !== "undefined" ? window.CARE_API_URL : undefined;
+  if (careApiUrl) {
+    const base = careApiUrl.replace(/\/$/, "");
+    return { baseUrl: `${base}/api/care_scribe_be/v1`, custom: true };
+  }
+  return {
+    baseUrl:
+      EKA_ENV === "DEV"
+        ? "https://api.dev.eka.care/voice/v1"
+        : "https://api.eka.care/voice/v1",
+    custom: false,
+  };
+}
+
+const { baseUrl: EKA_BASE_URL, custom: USING_CUSTOM_BACKEND } =
+  resolveScribeBackend();
+
+/** CARE user JWT — same convention as care_scribe_fe. */
+function getCareAccessToken(): string {
+  try {
+    return localStorage.getItem("care_access_token") || "";
+  } catch {
+    return "";
+  }
+}
+
+const SESSION_POLL_INTERVAL_MS = 750;
+const SESSION_POLL_MAX_ATTEMPTS = 160;
+
+// Template result statuses that mean processing is finished for that template.
+const TERMINAL_TEMPLATE_STATUSES = new Set([
+  "success",
+  "partial_success",
+  "failure",
+]);
+
+/**
+ * True once every requested template has finished processing. The overall
+ * session status can stay "processing" (FHIR docs, audio post-processing)
+ * well after our template data is ready — no reason to keep waiting.
+ */
+function templatesReady(sessionData: GetSessionStatusResponse): boolean {
+  const templates = sessionData.templates;
+  if (!templates?.length) return false;
+  return templates.every((entry) =>
+    Object.values(entry).every(
+      (templateData) =>
+        templateData && TERMINAL_TEMPLATE_STATUSES.has(templateData.status),
+    ),
+  );
+}
 
 function warnIfTokenEnvMismatch(env: "PROD" | "DEV", token: string) {
   if (!token || env !== "DEV") return;
@@ -98,8 +174,13 @@ export function useScribe({
   > | null>(null);
   const callbacksRegisteredRef = useRef(false);
 
-  const tokenRef = useRef(accessToken || EKA_ACCESS_TOKEN);
-  tokenRef.current = accessToken || EKA_ACCESS_TOKEN;
+  // Custom backend (CARE plugin): authenticate with the CARE user's JWT —
+  // same convention as care_scribe_fe. Eka cloud: use the Eka token.
+  const defaultToken = USING_CUSTOM_BACKEND
+    ? getCareAccessToken() || EKA_ACCESS_TOKEN
+    : EKA_ACCESS_TOKEN;
+  const tokenRef = useRef(accessToken || defaultToken);
+  tokenRef.current = accessToken || defaultToken;
 
   const onTokenRefreshRef = useRef(onTokenRefresh);
   onTokenRefreshRef.current = onTokenRefresh;
@@ -210,6 +291,29 @@ export function useScribe({
     }
   }, [accessToken]);
 
+  // Pre-warm the SDK (worker + discovery) and — when using Eka — the
+  // questionnaire template while the form is idle, so startRecording
+  // doesn't pay init/template creation latency on first click.
+  const prewarmedRef = useRef(false);
+  useEffect(() => {
+    if (prewarmedRef.current || !formStateProp || !tokenRef.current) return;
+    if (extractFormFields(formStateProp).length === 0) return;
+    prewarmedRef.current = true;
+    void (async () => {
+      try {
+        const ekascribe = await ensureInstance();
+        // Custom backend needs no pre-created template — the form schema is
+        // sent with each session instead.
+        if (!USING_CUSTOM_BACKEND) {
+          await getOrCreateTemplate(formStateProp, ekascribe);
+        }
+      } catch {
+        // Non-fatal — startRecording will retry.
+        prewarmedRef.current = false;
+      }
+    })();
+  }, [formStateProp, ensureInstance]);
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -256,11 +360,32 @@ export function useScribe({
 
         const ekascribe = await ensureInstance();
 
-        const templateId = formStateProp
-          ? await getOrCreateTemplate(formStateProp, ekascribe)
-          : "clinical_notes_template";
-        const templateIds = options?.templateIds || [templateId];
-        const language = options?.language || ["auto_detect"];
+        let templateIds: string[];
+        let additionalData: Record<string, unknown> | undefined =
+          options?.encounterId
+            ? { encounter_id: options.encounterId }
+            : undefined;
+
+        if (USING_CUSTOM_BACKEND) {
+          // Send the form schema with the session — our backend runs the
+          // extraction directly, no pre-registered template needed.
+          templateIds = options?.templateIds || ["care_form"];
+          const fields = formStateProp ? extractFormFields(formStateProp) : [];
+          if (fields.length > 0) {
+            const { desc, example } = buildTemplateDescription(fields);
+            additionalData = {
+              ...additionalData,
+              care_template: { desc, example },
+            };
+          }
+        } else {
+          const templateId = formStateProp
+            ? await getOrCreateTemplate(formStateProp, ekascribe)
+            : "clinical_notes_template";
+          templateIds = options?.templateIds || [templateId];
+        }
+
+        const language = options?.language || SCRIBE_LANGUAGES;
 
         const recordResult = await ekascribe.startRecordingV2({
           templates: templateIds,
@@ -268,9 +393,7 @@ export function useScribe({
           sessionMode: "consultation",
           languageHint: language,
           model: "pro",
-          additionalData: options?.encounterId
-            ? { encounter_id: options.encounterId }
-            : undefined,
+          additionalData,
         });
 
         if (recordResult.error_code) {
@@ -319,6 +442,8 @@ export function useScribe({
       stopTimer();
       updateStatus("processing");
 
+      const tStop = performance.now();
+
       let endResult = await ekascribe.endRecording();
       if (endResult.error_code === "audio_upload_failed") {
         const retryResult = await ekascribe.retryUploadRecording();
@@ -332,33 +457,63 @@ export function useScribe({
         throw new Error(endResult.message || "Failed to end recording");
       }
 
+      const tUploaded = performance.now();
+
       const sessionId = sessionIdRef.current;
       if (!sessionId) throw new Error("No session ID");
 
       let transcriptEmitted = false;
+      let tTranscript = 0;
+
+      // Stop polling as soon as our template data is terminal, instead of
+      // waiting for the whole session to flip to "completed".
+      const pollAbort = new AbortController();
+      let earlySessionData: GetSessionStatusResponse | null = null;
 
       const statusResult = await ekascribe.getSessionStatus(sessionId, {
         poll: {
           maxAttempts: SESSION_POLL_MAX_ATTEMPTS,
           intervalMs: SESSION_POLL_INTERVAL_MS,
+          signal: pollAbort.signal,
           onProgress: (sessionData) => {
             if (!transcriptEmitted && sessionData.transcript) {
               transcriptEmitted = true;
+              tTranscript = performance.now();
               setResult({ transcript: sessionData.transcript });
               onTranscript?.(sessionData.transcript);
+            }
+            if (
+              !earlySessionData &&
+              sessionData.transcript &&
+              templatesReady(sessionData)
+            ) {
+              earlySessionData = sessionData;
+              pollAbort.abort();
             }
           },
         },
       });
 
-      if (!statusResult.success) {
+      const sessionData =
+        (earlySessionData as GetSessionStatusResponse | null) ??
+        (statusResult.success ? statusResult.data : null);
+      if (!sessionData) {
         throw new Error(statusResult.error?.message || "Failed to get results");
       }
 
-      const sessionData = statusResult.data;
       const transcript = sessionData.transcript || "";
       const templates = sessionData.templates || [];
       const structuredData = extractStructuredData(templates);
+
+      const tDone = performance.now();
+      const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+      console.info(
+        `[EkaScribe] timing — upload flush: ${secs(tUploaded - tStop)}, ` +
+          `transcript: +${tTranscript ? secs(tTranscript - tUploaded) : "n/a"}, ` +
+          `templates: +${secs(tDone - (tTranscript || tUploaded))}, ` +
+          `total: ${secs(tDone - tStop)}` +
+          (earlySessionData ? " (early-exit before session completed)" : ""),
+      );
 
       if (EKA_ENV === "DEV") {
         console.log("[EkaScribe] Result:", {
@@ -372,8 +527,6 @@ export function useScribe({
         setResult({ transcript });
         onTranscript?.(transcript);
       }
-
-      await new Promise((r) => setTimeout(r, 1500));
 
       const scribeResult: ScribeResult = {
         transcript: transcript || undefined,
