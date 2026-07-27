@@ -344,7 +344,7 @@ export async function collectFieldsToFill(
 
           if (errors.length) {
             console.warn(
-              `[EkaScribe] Structured fill warnings for ${questionText}:`,
+              `[Scribe] Structured fill warnings for ${questionText}:`,
               errors,
             );
           }
@@ -392,7 +392,7 @@ export async function collectFieldsToFill(
           }
         } catch (err) {
           console.warn(
-            `[EkaScribe] Skipping structured field "${questionText}":`,
+            `[Scribe] Skipping structured field "${questionText}":`,
             err,
           );
         }

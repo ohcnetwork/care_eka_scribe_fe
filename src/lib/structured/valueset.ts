@@ -22,9 +22,7 @@ export async function expandValueSet(
 ): Promise<ValueSetExpandResult["results"]> {
   const baseUrl = window.CARE_API_URL;
   if (!baseUrl) {
-    console.warn(
-      "[EkaScribe] CARE_API_URL not set; cannot resolve SNOMED codes",
-    );
+    console.warn("[Scribe] CARE_API_URL not set; cannot resolve SNOMED codes");
     return [];
   }
 
@@ -70,7 +68,7 @@ export async function lookupCode(
       };
     }
   } catch (err) {
-    console.warn("[EkaScribe] lookupCode failed:", err);
+    console.warn("[Scribe] lookupCode failed:", err);
   }
 
   return searchByDisplay(valueSetSlug, displays);
@@ -105,7 +103,7 @@ export async function searchByDisplay(
         };
       }
     } catch (err) {
-      console.warn("[EkaScribe] searchByDisplay failed:", err);
+      console.warn("[Scribe] searchByDisplay failed:", err);
     }
   }
   return null;

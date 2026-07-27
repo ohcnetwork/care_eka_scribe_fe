@@ -34,11 +34,11 @@ const PROCESSING_STEPS = [
 
 export function ScribeController(props: ScribeControllerProps) {
   // Tailwind utilities in this plugin are scoped under
-  // `.care-eka-scribe-fe-container` (see index.css). The rendered output must
+  // `.care-scribie-fe-container` (see index.css). The rendered output must
   // live inside that container for classes (fixed positioning, gradients, etc.)
   // and theme tokens to apply.
   return (
-    <div className="care-eka-scribe-fe-container">
+    <div className="care-scribie-fe-container">
       <ScribeControllerInner {...props} />
     </div>
   );
@@ -64,7 +64,7 @@ function ScribeControllerInner({
     async (result: ScribeResult) => {
       if (!setFormState || !formState) return;
       if (!result.structuredData) {
-        console.warn("[EkaScribe] No structured data to fill");
+        console.warn("[Scribe] No structured data to fill");
         return;
       }
       if (appliedRef.current) return;
@@ -77,12 +77,12 @@ function ScribeControllerInner({
         );
 
         if (import.meta.env.DEV) {
-          console.log("[EkaScribe] Fields to fill:", fieldsToFill);
+          console.log("[Scribe] Fields to fill:", fieldsToFill);
         }
 
         if (!fieldsToFill.length) {
           console.warn(
-            "[EkaScribe] No matching fields found for extracted data",
+            "[Scribe] No matching fields found for extracted data",
             result.structuredData,
           );
         }
@@ -102,7 +102,7 @@ function ScribeControllerInner({
         });
       } catch (err) {
         appliedRef.current = false;
-        console.error("[EkaScribe] Failed to apply results:", err);
+        console.error("[Scribe] Failed to apply results:", err);
       }
     },
     [formState, setFormState],
@@ -116,11 +116,11 @@ function ScribeControllerInner({
       setLiveTranscript(transcript);
     },
     onResult: (result) => {
-      console.log("[EkaScribe] Result:", result);
+      console.log("[Scribe] Result:", result);
       void applyResults(result);
     },
     onError: (error) => {
-      console.error("[EkaScribe] Error:", error);
+      console.error("[Scribe] Error:", error);
     },
   });
 
@@ -238,7 +238,7 @@ function ScribeControllerInner({
   // Idle state — floating pill FAB (bottom-right)
   if (scribe.status === "idle") {
     return (
-      <div className="ekascribe-pop-in fixed right-4 bottom-4 z-9999 sm:right-6 sm:bottom-6">
+      <div className="scribe-pop-in fixed right-4 bottom-4 z-9999 sm:right-6 sm:bottom-6">
         <button
           onClick={handleStart}
           disabled={scribe.isStarting}
@@ -251,7 +251,7 @@ function ScribeControllerInner({
           title={scribe.isStarting ? t("starting") : t("start_ai_scribe")}
         >
           {/* soft rotating glow */}
-          <span className="ekascribe-spin-slow pointer-events-none absolute -inset-16 scale-150 rounded-full bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.35),transparent)] opacity-60" />
+          <span className="scribe-spin-slow pointer-events-none absolute -inset-16 scale-150 rounded-full bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.35),transparent)] opacity-60" />
           <span className="relative flex h-6 w-6 items-center justify-center">
             {scribe.isStarting ? (
               <Loader2 className="h-5 w-5 animate-spin" />
@@ -282,7 +282,7 @@ function ScribeControllerInner({
   // Compact / status views (recording, processing, completed, failed)
   if (!expanded) {
     return (
-      <div className="ekascribe-pop-in fixed right-4 bottom-4 z-9999 flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
+      <div className="scribe-pop-in fixed right-4 bottom-4 z-9999 flex flex-col items-end gap-3 sm:right-6 sm:bottom-6">
         {/* Live transcript — collapsible, shown while processing/completed */}
         {showTranscript && !transcriptMinimized && (
           <div className="w-72 overflow-hidden rounded-2xl border border-gray-100 bg-white/95 shadow-xl backdrop-blur">
@@ -315,7 +315,7 @@ function ScribeControllerInner({
         {/* PROCESSING — text above orb, no card */}
         {scribe.status === "processing" && (
           <div className="flex flex-col items-center gap-2">
-            <p className="ekascribe-shimmer-text text-xs font-medium">
+            <p className="scribe-shimmer-text text-xs font-medium">
               {t(PROCESSING_STEPS[processingStep])}
             </p>
             <AiPulse />
@@ -336,7 +336,7 @@ function ScribeControllerInner({
           <div className="flex flex-col items-center gap-2 pr-4">
             {/* timer + pause button inline */}
             <div className="flex items-center gap-1.5">
-              <span className="ekascribe-shimmer-text text-xs font-medium">
+              <span className="scribe-shimmer-text text-xs font-medium">
                 {timeStr}
               </span>
               <button
@@ -353,7 +353,7 @@ function ScribeControllerInner({
               className="group relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-linear-to-br from-primary-600 via-primary-700 to-primary-800 shadow-lg shadow-primary-700/40 transition-all active:scale-95 hover:shadow-xl hover:shadow-primary-700/50 opacity-85 blur-lg hover:opacity-100"
             >
               {/* rotating conic glow */}
-              <span className="ekascribe-spin-slow pointer-events-none absolute -inset-10 rounded-full bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.3),transparent)] opacity-50" />
+              <span className="scribe-spin-slow pointer-events-none absolute -inset-10 rounded-full bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.3),transparent)] opacity-50" />
               {/* live audio bars — height driven by Web Audio AnalyserNode */}
               <span className="relative flex h-6 items-center gap-0.5 transition-opacity group-hover:opacity-0">
                 {barHeights.map((h, i) => (
@@ -451,7 +451,7 @@ function ScribeControllerInner({
 
   // Expanded view — show transcript & results
   return (
-    <div className="ekascribe-pop-in fixed right-4 bottom-4 z-9999 w-80 sm:right-6 sm:bottom-6">
+    <div className="scribe-pop-in fixed right-4 bottom-4 z-9999 w-80 sm:right-6 sm:bottom-6">
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 bg-linear-to-r from-primary-100 to-transparent px-3 py-2.5">
@@ -556,7 +556,7 @@ function _VoiceBars({ className }: { className?: string }) {
       {[0, 1, 2, 3, 4].map((i) => (
         <span
           key={i}
-          className="ekascribe-bar w-0.5 rounded-full bg-current"
+          className="scribe-bar w-0.5 rounded-full bg-current"
           style={{ height: "100%", animationDelay: `${i * 0.12}s` }}
         />
       ))}
@@ -570,17 +570,17 @@ function AiPulse() {
   return (
     <div className="relative flex h-20 w-20 items-center justify-center">
       {/* ambient glow */}
-      <span className="ekascribe-glow absolute h-14 w-14 rounded-full bg-primary-400/40 blur-xl" />
+      <span className="scribe-glow absolute h-14 w-14 rounded-full bg-primary-400/40 blur-xl" />
 
       {/* outer arc — slow clockwise comet */}
       <svg
-        className="ekascribe-spin-slow absolute inset-0 h-full w-full"
+        className="scribe-spin-slow absolute inset-0 h-full w-full"
         viewBox="0 0 80 80"
         fill="none"
       >
         <defs>
           <linearGradient
-            id="ekascribe-arc-outer"
+            id="scribe-arc-outer"
             gradientUnits="userSpaceOnUse"
             x1="4"
             y1="40"
@@ -595,7 +595,7 @@ function AiPulse() {
           cx="40"
           cy="40"
           r="36"
-          stroke="url(#ekascribe-arc-outer)"
+          stroke="url(#scribe-arc-outer)"
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeDasharray="158 68"
@@ -605,13 +605,13 @@ function AiPulse() {
       {/* inner arc — faster counter-clockwise comet */}
       <svg
         className="absolute inset-2 h-[calc(100%-1rem)] w-[calc(100%-1rem)]"
-        style={{ animation: "ekascribe-spin 2.6s linear infinite reverse" }}
+        style={{ animation: "scribe-spin 2.6s linear infinite reverse" }}
         viewBox="0 0 64 64"
         fill="none"
       >
         <defs>
           <linearGradient
-            id="ekascribe-arc-inner"
+            id="scribe-arc-inner"
             gradientUnits="userSpaceOnUse"
             x1="4"
             y1="32"
@@ -626,7 +626,7 @@ function AiPulse() {
           cx="32"
           cy="32"
           r="28"
-          stroke="url(#ekascribe-arc-inner)"
+          stroke="url(#scribe-arc-inner)"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeDasharray="110 66"
@@ -636,8 +636,8 @@ function AiPulse() {
       {/* blinking blurry star core */}
       <div className="relative z-10 flex h-8 w-8 items-center justify-center">
         {/* soft glow behind the star */}
-        <span className="ekascribe-orb absolute h-8 w-8 rounded-full bg-primary-400/50 blur-md" />
-        <Sparkles className="ekascribe-star-blink relative h-5 w-5 text-white drop-shadow-[0_0_6px_#31c48d]" />
+        <span className="scribe-orb absolute h-8 w-8 rounded-full bg-primary-400/50 blur-md" />
+        <Sparkles className="scribe-star-blink relative h-5 w-5 text-white drop-shadow-[0_0_6px_#31c48d]" />
       </div>
     </div>
   );
@@ -646,7 +646,7 @@ function AiPulse() {
 // --- Form fill utilities ---
 
 function highlightField(qId: string): void {
-  const HIGHLIGHT_CLASS = "ekascribe-highlight";
+  const HIGHLIGHT_CLASS = "scribe-highlight";
   const el = document.getElementById(`question-${qId}`);
   if (!el) return;
 

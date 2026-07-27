@@ -1,6 +1,6 @@
-# How care_eka_scribe_fe Works
+# How care_scribie_fe Works
 
-`care_eka_scribe_fe` is a **Care Frontend plugin** that adds AI-powered clinical documentation (EkaScribe) to OHCN's EMR. It runs as a **module federation remote** inside [care_fe](https://github.com/ohcnetwork/care_fe) and extends the host application with a floating **Scribe** component that records consultations and auto-fills questionnaire forms.
+`care_scribie_fe` is a **Care Frontend plugin** that adds AI-powered clinical documentation (Scribe) to OHCN's EMR. It runs as a **module federation remote** inside [care_fe](https://github.com/ohcnetwork/care_fe) and extends the host application with a floating **Scribe** component that records consultations and auto-fills questionnaire forms.
 
 ---
 
@@ -14,16 +14,15 @@ flowchart TB
         Form["Questionnaire form state"]
     end
 
-    subgraph care_eka_scribe_fe["care_eka_scribe_fe (remote)"]
+    subgraph care_scribie_fe["care_scribie_fe (remote)"]
         Manifest["manifest.ts"]
         ScribeController["ScribeController"]
         useScribe["useScribe hook"]
         TemplateBuilder["template-builder"]
     end
 
-    subgraph eka["Eka Care API"]
-        VoiceAPI["Voice / Scribe API"]
-        Templates["Dynamic templates"]
+    subgraph backend["Scribe backend (care_scribe_be)"]
+        VoiceAPI["MedScribe Alliance API"]
     end
 
     Host --> PluginLoader
@@ -32,15 +31,14 @@ flowchart TB
     ScribeController -->|"formState, setFormState"| Form
     ScribeController --> useScribe
     useScribe --> TemplateBuilder
-    useScribe -->|"@eka-care/ekascribe-ts-sdk"| VoiceAPI
-    TemplateBuilder --> Templates
+    useScribe -->|"med-scribe-alliance-ts-sdk"| VoiceAPI
 ```
 
-| Layer                  | Role                                                                          |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| **care_fe**            | Host app; loads plugins, renders extended components, owns form state         |
-| **care_eka_scribe_fe** | Remote microfrontend; exposes manifest + Scribe UI                            |
-| **EkaScribe SDK**      | Handles mic capture, chunked upload, transcription, and structured extraction |
+| Layer               | Role                                                                          |
+| ------------------- | ----------------------------------------------------------------------------- |
+| **care_fe**         | Host app; loads plugins, renders extended components, owns form state         |
+| **care_scribie_fe** | Remote microfrontend; exposes manifest + Scribe UI                            |
+| **MedScribe SDK**   | Handles mic capture, chunked upload, transcription, and structured extraction |
 
 ---
 
@@ -87,7 +85,7 @@ exposes: {
 
 ## Core Feature: AI Scribe
 
-The Scribe records a clinical consultation, sends audio to Eka Care, and returns:
+The Scribe records a clinical consultation, sends audio to the scribe backend, and returns:
 
 1. A **transcript** of the conversation
 2. **Structured data** keyed by form field labels (vitals, notes, etc.)
@@ -101,14 +99,14 @@ sequenceDiagram
     participant User
     participant SC as ScribeController
     participant Hook as useScribe
-    participant SDK as EkaScribe SDK
-    participant API as Eka Voice API
+    participant SDK as MedScribe SDK
+    participant API as Scribe backend
     participant Form as CARE form state
 
     User->>SC: Click mic (start)
     SC->>Hook: startRecording()
-    Hook->>Hook: getOrCreateTemplate(formState)
-    Hook->>SDK: startRecordingV2(templates, consultation mode)
+    Hook->>Hook: buildTemplateDescription(formState)
+    Hook->>SDK: startRecording(templates, consultation mode)
     SDK->>API: Stream chunked audio
     Note over SC: Recording pill UI (pause / stop)
 
@@ -141,11 +139,11 @@ sequenceDiagram
 
 ### `useScribe` (`src/hooks/useScribe.ts`)
 
-Central hook wrapping `@eka-care/ekascribe-ts-sdk`.
+Central hook wrapping `med-scribe-alliance-ts-sdk`.
 
 **Responsibilities:**
 
-- Lazily initialize a singleton EkaScribe instance (with a shared worker blob URL)
+- Lazily initialize a singleton `ScribeClient` instance (with a shared worker blob URL)
 - Register SDK callbacks: `onTokenRequired`, `onError`, `onUploadEvent`, `onRecordingStateChange`
 - Manage recording state, duration timer, and session ID
 - On stop: end recording → poll session status → parse templates → emit `ScribeResult`
@@ -153,22 +151,21 @@ Central hook wrapping `@eka-care/ekascribe-ts-sdk`.
 
 **Configuration** (baked in at build time via `.env`):
 
-| Variable                 | Purpose                                                                                                                                 |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `REACT_EKA_ACCESS_TOKEN` | Long-lived token from [console.dev.eka.care](https://console.dev.eka.care) (DEV) or [console.eka.care](https://console.eka.care) (PROD) |
-| `REACT_EKA_ENV`          | `DEV` → `api.dev.eka.care`; `PROD` → `api.eka.care`                                                                                     |
+| Variable                 | Purpose                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `REACT_SCRIBE_BE_URL`    | Explicit scribe backend override; when unset, `window.CARE_API_URL + /api/care_scribe_be` is used |
+| `REACT_SCRIBE_LANGUAGES` | Spoken language hint (comma-separated ISO codes, e.g. `ta`)                                       |
 
-> **Important:** Token and environment must match. A PROD token with `REACT_EKA_ENV=DEV` causes 403/CORS errors in the browser. When running inside care_fe, CORS is checked against the **host page origin** (e.g. `http://localhost:4000`), not the plugin's `:10122` preview URL.
+> **Important:** When running inside care_fe, CORS is checked against the **host page origin** (e.g. `http://localhost:4000`), not the plugin's `:10122` preview URL. Authentication uses the logged-in CARE user's JWT (`care_access_token` in localStorage).
 
 ### `template-builder` (`src/lib/template-builder.ts`)
 
-Before recording, the plugin builds an EkaScribe **template** tailored to the current questionnaire:
+Before recording, the plugin builds an extraction prompt tailored to the current questionnaire:
 
-1. **`extractFormFields(formState)`** — walks questionnaire groups, collects fillable fields (skips `group`, `structured`, `date`, `dateTime`)
+1. **`extractFormFields(formState)`** — walks questionnaire groups, collects fillable fields (skips `group`, unsupported `structured`, `date`, `dateTime`)
 2. **`buildTemplateDescription(fields)`** — generates a prompt instructing the model to return JSON with keys matching field labels
-3. **`getOrCreateTemplate(formState, ekascribe)`** — creates section + template via SDK, or reuses a cached template ID from `localStorage` (keyed by questionnaire slug, 7-day TTL)
 
-If template creation fails or no fields are found, it falls back to `clinical_notes_template`.
+The prompt is sent with each session as `additional_data.care_template` — the backend runs the extraction directly, no pre-registered template needed.
 
 ### `ScribeController` (`src/components/scribe/ScribeController.tsx`)
 
@@ -245,13 +242,12 @@ An array of group objects, each containing:
 
 - Node.js ≥ 22.9.0
 - A running **care_fe** instance configured to load this plugin
-- EkaScribe access token (see `.env.example`)
+- A scribe backend (see `.env.example`)
 
 ### Setup
 
 ```bash
 cp .env.example .env
-# Edit .env with REACT_EKA_ACCESS_TOKEN and REACT_EKA_ENV
 
 npm install
 npm start
@@ -272,7 +268,7 @@ The plugin is registered in care_fe via `care-package.lock`:
 
 ```json
 {
-  "package": "ohcnetwork/care_eka_scribe_fe_fe",
+  "package": "ohcnetwork/care_scribie_fe_fe",
   "branch": "main"
 }
 ```
@@ -289,7 +285,7 @@ src/
 ├── routes.tsx               # Empty routes (reserved for future pages)
 ├── index.tsx                # Federation entry + exports
 ├── hooks/
-│   └── useScribe.ts         # EkaScribe SDK integration
+│   └── useScribe.ts         # MedScribe Alliance SDK integration
 ├── components/
 │   └── scribe/
 │       ├── ScribeController.tsx   # Main UI + form auto-fill
@@ -297,7 +293,7 @@ src/
 │       ├── ResultPanel.tsx
 │       └── ScribeButton.tsx
 └── lib/
-    ├── template-builder.ts  # Dynamic EkaScribe template creation
+    ├── template-builder.ts  # Dynamic extraction prompt from form fields
     ├── types/scribe.ts
     └── request.ts           # Care API HTTP helpers (for future use)
 ```
@@ -306,19 +302,18 @@ src/
 
 ## Error Handling & Edge Cases
 
-- **Audio upload failure** — `stopRecording` retries via `retryUploadRecording()` before failing
-- **Token refresh** — SDK `onTokenRequired` callback can call `onTokenRefresh` prop (not wired in `ScribeController` yet; uses env token)
-- **Template cache invalidation** — cache misses when field count changes for the same questionnaire slug
-- **No fillable fields** — falls back to `clinical_notes_template`; only transcript is produced
-- **PROD token in DEV** — `warnIfTokenEnvMismatch()` logs a console warning at init
+- **Audio upload failure** — `stopRecording` retries via `retryFailedUploads()` before failing
+- **Token refresh** — SDK `onTokenRequired` callback can call `onTokenRefresh` prop (not wired in `ScribeController` yet; uses the CARE user's JWT)
+- **No fillable fields** — no extraction prompt is sent; only transcript is produced
+- **No backend configured** — `startRecording` fails with a clear error if neither `REACT_SCRIBE_BE_URL` nor `window.CARE_API_URL` is available
 
 ---
 
 ## Summary
 
 1. **care_fe** loads this plugin as a federated remote and renders `ScribeController` on questionnaire forms.
-2. The user records a consultation; audio goes to **Eka Care** via the **EkaScribe SDK**.
-3. A **dynamic template** (built from the current form's fields) instructs the AI what JSON to return.
+2. The user records a consultation; audio goes to the **scribe backend** via the **MedScribe Alliance SDK**.
+3. A **dynamic extraction prompt** (built from the current form's fields) instructs the AI what JSON to return.
 4. Extracted values are **fuzzy-matched** to question labels and written into CARE form responses.
 5. Filled fields are **highlighted and scrolled into view** for clinician review.
 

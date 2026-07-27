@@ -1,9 +1,8 @@
 import {
-  type EkaScribeConfig,
   type GetSessionStatusResponse,
-  createWorkerBlobUrl,
-  getEkaScribeInstance,
-} from "@eka-care/ekascribe-ts-sdk";
+  ScribeClient,
+  type ScribeSDKConfig,
+} from "med-scribe-alliance-ts-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -13,12 +12,10 @@ import {
 import {
   buildTemplateDescription,
   extractFormFields,
-  getOrCreateTemplate,
 } from "@/lib/template-builder";
 import type { ScribeResult, ScribeStatus } from "@/lib/types/scribe";
 
-const EKA_ENV = (import.meta.env.REACT_EKA_ENV || "DEV") as "PROD" | "DEV";
-const EKA_ACCESS_TOKEN = import.meta.env.REACT_EKA_ACCESS_TOKEN || "";
+const DEBUG = import.meta.env.DEV;
 
 // Spoken language hint, comma-separated ISO codes (e.g. "ta" or "ta,en").
 // Forcing the language avoids per-chunk auto-detection flip-flopping on
@@ -34,41 +31,34 @@ const SCRIBE_LANGUAGES: string[] = (
 // 1. REACT_SCRIBE_BE_URL env — explicit override (standalone FastAPI server)
 // 2. window.CARE_API_URL + /api/care_scribe_be — CARE backend plugin, same
 //    origin/auth as the rest of the CARE API (care_scribe_fe convention)
-// 3. Eka Care cloud — fallback when neither is available
 const SCRIBE_BE_OVERRIDE = (import.meta.env.REACT_SCRIBE_BE_URL || "").replace(
   /\/$/,
   "",
 );
 
-function resolveScribeBackend(): { baseUrl: string; custom: boolean } {
+function resolveScribeBackend(): string | null {
   if (SCRIBE_BE_OVERRIDE) {
-    return { baseUrl: `${SCRIBE_BE_OVERRIDE}/v1`, custom: true };
+    return `${SCRIBE_BE_OVERRIDE}/v1`;
   }
   const careApiUrl =
     typeof window !== "undefined" ? window.CARE_API_URL : undefined;
   if (careApiUrl) {
     const base = careApiUrl.replace(/\/$/, "");
-    return { baseUrl: `${base}/api/care_scribe_be/v1`, custom: true };
+    return `${base}/api/care_scribe_be/v1`;
   }
-  return {
-    baseUrl:
-      EKA_ENV === "DEV"
-        ? "https://api.dev.eka.care/voice/v1"
-        : "https://api.eka.care/voice/v1",
-    custom: false,
-  };
+  return null;
 }
 
-const { baseUrl: EKA_BASE_URL, custom: USING_CUSTOM_BACKEND } =
-  resolveScribeBackend();
+const SCRIBE_BASE_URL = resolveScribeBackend();
 
 // The SDK sends `credentials: "include"` on every request, but the CARE API
 // does not respond with `Access-Control-Allow-Credentials: true` — browsers
 // then block the request entirely ("Failed to fetch discovery document" in
 // production). Auth is a Bearer JWT, so credentials are never needed.
-if (USING_CUSTOM_BACKEND) {
+// The worker gets its own shim via createShimmedWorkerBlobUrl.
+if (SCRIBE_BASE_URL) {
   try {
-    installFetchCredentialsShim(new URL(EKA_BASE_URL).origin);
+    installFetchCredentialsShim(new URL(SCRIBE_BASE_URL).origin);
   } catch {
     // Relative/invalid base URL — same-origin anyway, no shim needed.
   }
@@ -107,28 +97,6 @@ function templatesReady(sessionData: GetSessionStatusResponse): boolean {
         templateData && TERMINAL_TEMPLATE_STATUSES.has(templateData.status),
     ),
   );
-}
-
-function warnIfTokenEnvMismatch(env: "PROD" | "DEV", token: string) {
-  if (!token || env !== "DEV") return;
-  try {
-    const payload = token.split(".")[1];
-    if (!payload) return;
-    const data = JSON.parse(
-      atob(payload.replace(/-/g, "+").replace(/_/g, "/")),
-    ) as { iss?: string };
-    // Prod-console tokens use emr.eka.care; they are rejected by api.dev.eka.care
-    // with 403 and no CORS headers — the browser surfaces that as a CORS error.
-    if (data.iss === "emr.eka.care") {
-      console.warn(
-        "[EkaScribe] PROD token detected with REACT_EKA_ENV=DEV. " +
-          "The dev API will return Forbidden (often shown as CORS). " +
-          "Use a token from console.dev.eka.care, or set REACT_EKA_ENV=PROD and rebuild.",
-      );
-    }
-  } catch {
-    // Ignore malformed tokens
-  }
 }
 
 interface UseScribeOptions {
@@ -177,24 +145,17 @@ export function useScribe({
   const [result, setResult] = useState<ScribeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const instanceRef = useRef<ReturnType<typeof getEkaScribeInstance> | null>(
-    null,
-  );
+  const instanceRef = useRef<ScribeClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const accumulatedRef = useRef<number>(0); // ms accumulated before the current segment
   const workerUrlRef = useRef<string | null>(null);
-  const initPromiseRef = useRef<Promise<
-    ReturnType<typeof getEkaScribeInstance>
-  > | null>(null);
+  const initPromiseRef = useRef<Promise<ScribeClient> | null>(null);
   const callbacksRegisteredRef = useRef(false);
 
-  // Custom backend (CARE plugin): authenticate with the CARE user's JWT —
-  // same convention as care_scribe_fe. Eka cloud: use the Eka token.
-  const defaultToken = USING_CUSTOM_BACKEND
-    ? getCareAccessToken() || EKA_ACCESS_TOKEN
-    : EKA_ACCESS_TOKEN;
+  // Authenticate with the CARE user's JWT — same convention as care_scribe_fe.
+  const defaultToken = getCareAccessToken();
   const tokenRef = useRef(accessToken || defaultToken);
   tokenRef.current = accessToken || defaultToken;
 
@@ -212,43 +173,41 @@ export function useScribe({
     [onStatusChange],
   );
 
-  const registerSdkCallbacks = useCallback(
-    (ekascribe: ReturnType<typeof getEkaScribeInstance>) => {
-      if (callbacksRegisteredRef.current) return;
+  const registerSdkCallbacks = useCallback((client: ScribeClient) => {
+    if (callbacksRegisteredRef.current) return;
 
-      ekascribe.registerCallback("onTokenRequired", async () => {
+    client.registerCallback("onTokenRequired", (event) => {
+      void (async () => {
         const refreshed = await onTokenRefreshRef.current?.();
         if (refreshed) {
           tokenRef.current = refreshed;
-          return refreshed;
         }
-        return tokenRef.current;
-      });
+        event.resolve(tokenRef.current);
+      })();
+    });
 
-      ekascribe.registerCallback("onError", (event) => {
-        const message = event.error.message || "EkaScribe error";
-        setError(message);
-        onErrorRef.current?.(new Error(message));
-      });
+    client.registerCallback("onError", (event) => {
+      const message = event.error.message || "Scribe error";
+      setError(message);
+      onErrorRef.current?.(new Error(message));
+    });
 
-      ekascribe.registerCallback("onUploadEvent", (event) => {
-        if (EKA_ENV === "DEV" && event.type === "progress") {
-          console.log(
-            `[EkaScribe] Upload ${event.data.successCount}/${event.data.totalCount}`,
-          );
-        }
-      });
+    client.registerCallback("onUploadEvent", (event) => {
+      if (DEBUG && event.type === "progress") {
+        console.log(
+          `[Scribe] Upload ${event.data.successCount}/${event.data.totalCount}`,
+        );
+      }
+    });
 
-      ekascribe.registerCallback("onRecordingStateChange", (event) => {
-        if (EKA_ENV === "DEV") {
-          console.log("[EkaScribe] Recording state:", event.type);
-        }
-      });
+    client.registerCallback("onRecordingStateChange", (event) => {
+      if (DEBUG) {
+        console.log("[Scribe] Recording state:", event.type);
+      }
+    });
 
-      callbacksRegisteredRef.current = true;
-    },
-    [],
-  );
+    callbacksRegisteredRef.current = true;
+  }, []);
 
   const ensureInstance = useCallback(async () => {
     if (instanceRef.current) {
@@ -261,41 +220,41 @@ export function useScribe({
     }
 
     initPromiseRef.current = (async () => {
-      // Custom backend: shim the worker's fetch so chunk uploads don't send
-      // credentials either (same CORS failure mode as discovery).
-      const sharedWorkerUrl = USING_CUSTOM_BACKEND
-        ? await createShimmedWorkerBlobUrl()
-        : await createWorkerBlobUrl();
-      workerUrlRef.current = sharedWorkerUrl;
+      if (!SCRIBE_BASE_URL) {
+        throw new Error(
+          "No scribe backend configured — set REACT_SCRIBE_BE_URL or run inside CARE (window.CARE_API_URL).",
+        );
+      }
 
-      const config: EkaScribeConfig = {
-        access_token: tokenRef.current,
-        env: EKA_ENV,
-        sharedWorkerUrl,
-        allianceConfig: {
-          baseUrl: EKA_BASE_URL,
-          useWorker: "auto",
-          debug: EKA_ENV === "DEV",
-        },
+      // Shim the worker's fetch so chunk uploads don't send credentials
+      // (same CORS failure mode as discovery).
+      const workerScriptUrl = await createShimmedWorkerBlobUrl();
+      workerUrlRef.current = workerScriptUrl;
+
+      const config: ScribeSDKConfig = {
+        baseUrl: SCRIBE_BASE_URL,
+        accessToken: tokenRef.current,
+        workerScriptUrl,
+        useWorker: "auto",
+        debug: DEBUG,
       };
 
-      const ekascribe = getEkaScribeInstance(config);
-      registerSdkCallbacks(ekascribe);
-      instanceRef.current = ekascribe;
+      const client = new ScribeClient(config);
+      registerSdkCallbacks(client);
+      instanceRef.current = client;
 
-      if (EKA_ENV === "DEV") {
-        warnIfTokenEnvMismatch(EKA_ENV, tokenRef.current);
+      if (DEBUG) {
         console.info(
-          "[EkaScribe] Plugin loaded in care_fe — API CORS uses the host page origin, not the plugin remote URL.",
+          "[Scribe] Plugin loaded in care_fe — API CORS uses the host page origin, not the plugin remote URL.",
           {
             pageOrigin: window.location.origin,
-            apiBaseUrl: EKA_BASE_URL,
+            apiBaseUrl: SCRIBE_BASE_URL,
             hasToken: Boolean(tokenRef.current),
           },
         );
       }
 
-      return ekascribe;
+      return client;
     })();
 
     try {
@@ -307,13 +266,12 @@ export function useScribe({
 
   useEffect(() => {
     if (instanceRef.current && tokenRef.current) {
-      instanceRef.current.updateAuthTokens({ access_token: tokenRef.current });
+      instanceRef.current.setAccessToken(tokenRef.current);
     }
   }, [accessToken]);
 
-  // Pre-warm the SDK (worker + discovery) and — when using Eka — the
-  // questionnaire template while the form is idle, so startRecording
-  // doesn't pay init/template creation latency on first click.
+  // Pre-warm the SDK (worker + discovery) while the form is idle, so
+  // startRecording doesn't pay init latency on first click.
   const prewarmedRef = useRef(false);
   useEffect(() => {
     if (prewarmedRef.current || !formStateProp || !tokenRef.current) return;
@@ -321,12 +279,7 @@ export function useScribe({
     prewarmedRef.current = true;
     void (async () => {
       try {
-        const ekascribe = await ensureInstance();
-        // Custom backend needs no pre-created template — the form schema is
-        // sent with each session instead.
-        if (!USING_CUSTOM_BACKEND) {
-          await getOrCreateTemplate(formStateProp, ekascribe);
-        }
+        await ensureInstance();
       } catch {
         // Non-fatal — startRecording will retry.
         prewarmedRef.current = false;
@@ -337,7 +290,7 @@ export function useScribe({
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      void instanceRef.current?.resetInstance();
+      void instanceRef.current?.reset();
       if (workerUrlRef.current?.startsWith("blob:")) {
         URL.revokeObjectURL(workerUrlRef.current);
         workerUrlRef.current = null;
@@ -378,36 +331,27 @@ export function useScribe({
         setError(null);
         setResult(null);
 
-        const ekascribe = await ensureInstance();
+        const client = await ensureInstance();
 
-        let templateIds: string[];
+        // Send the form schema with the session — the backend runs the
+        // extraction directly, no pre-registered template needed.
+        const templateIds = options?.templateIds || ["care_form"];
         let additionalData: Record<string, unknown> | undefined =
           options?.encounterId
             ? { encounter_id: options.encounterId }
             : undefined;
-
-        if (USING_CUSTOM_BACKEND) {
-          // Send the form schema with the session — our backend runs the
-          // extraction directly, no pre-registered template needed.
-          templateIds = options?.templateIds || ["care_form"];
-          const fields = formStateProp ? extractFormFields(formStateProp) : [];
-          if (fields.length > 0) {
-            const { desc, example } = buildTemplateDescription(fields);
-            additionalData = {
-              ...additionalData,
-              care_template: { desc, example },
-            };
-          }
-        } else {
-          const templateId = formStateProp
-            ? await getOrCreateTemplate(formStateProp, ekascribe)
-            : "clinical_notes_template";
-          templateIds = options?.templateIds || [templateId];
+        const fields = formStateProp ? extractFormFields(formStateProp) : [];
+        if (fields.length > 0) {
+          const { desc, example } = buildTemplateDescription(fields);
+          additionalData = {
+            ...additionalData,
+            care_template: { desc, example },
+          };
         }
 
         const language = options?.language || SCRIBE_LANGUAGES;
 
-        const recordResult = await ekascribe.startRecordingV2({
+        const recordResult = await client.startRecording({
           templates: templateIds,
           uploadType: "chunked",
           sessionMode: "consultation",
@@ -416,11 +360,13 @@ export function useScribe({
           additionalData,
         });
 
-        if (recordResult.error_code) {
-          throw new Error(recordResult.message || "Failed to start recording");
+        if (!recordResult.success) {
+          throw new Error(
+            recordResult.error.message || "Failed to start recording",
+          );
         }
 
-        sessionIdRef.current = recordResult.txn_id || null;
+        sessionIdRef.current = recordResult.data.session_id || null;
         updateStatus("recording");
         startTimer();
       } catch (err) {
@@ -437,18 +383,18 @@ export function useScribe({
   );
 
   const pauseRecording = useCallback(() => {
-    const ekascribe = instanceRef.current;
-    if (ekascribe) {
-      ekascribe.pauseRecording();
+    const client = instanceRef.current;
+    if (client) {
+      client.pauseRecording();
       stopTimer(true); // save accumulated time before pausing
       updateStatus("paused");
     }
   }, [stopTimer, updateStatus]);
 
   const resumeRecording = useCallback(() => {
-    const ekascribe = instanceRef.current;
-    if (ekascribe) {
-      ekascribe.resumeRecording();
+    const client = instanceRef.current;
+    if (client) {
+      client.resumeRecording();
       startTimer();
       updateStatus("recording");
     }
@@ -456,25 +402,34 @@ export function useScribe({
 
   const stopRecording = useCallback(async () => {
     try {
-      const ekascribe = instanceRef.current;
-      if (!ekascribe) return;
+      const client = instanceRef.current;
+      if (!client) return;
 
       stopTimer();
       updateStatus("processing");
 
       const tStop = performance.now();
 
-      let endResult = await ekascribe.endRecording();
-      if (endResult.error_code === "audio_upload_failed") {
-        const retryResult = await ekascribe.retryUploadRecording();
-        if (retryResult.error_code) {
+      const endResult = await client.endRecording();
+      if (!endResult.success) {
+        throw new Error(endResult.error.message || "Failed to end recording");
+      }
+      if (!endResult.data.sessionEnded) {
+        // Some chunks failed to upload — retry once, then finalize.
+        const retryResult = await client.retryFailedUploads();
+        if (!retryResult.success || retryResult.data.stillFailed.length > 0) {
+          throw new Error("Failed to upload recording audio");
+        }
+        const total = endResult.data.totalFiles;
+        const endSessionResult = await client.endSession({
+          audio_files_sent: total,
+          audio_files_uploaded: total,
+        });
+        if (!endSessionResult.success) {
           throw new Error(
-            retryResult.message || "Failed to upload recording audio",
+            endSessionResult.error.message || "Failed to end recording",
           );
         }
-        endResult = retryResult;
-      } else if (endResult.error_code) {
-        throw new Error(endResult.message || "Failed to end recording");
       }
 
       const tUploaded = performance.now();
@@ -490,7 +445,7 @@ export function useScribe({
       const pollAbort = new AbortController();
       let earlySessionData: GetSessionStatusResponse | null = null;
 
-      const statusResult = await ekascribe.getSessionStatus(sessionId, {
+      const statusResult = await client.getSessionStatus(sessionId, {
         poll: {
           maxAttempts: SESSION_POLL_MAX_ATTEMPTS,
           intervalMs: SESSION_POLL_INTERVAL_MS,
@@ -518,7 +473,10 @@ export function useScribe({
         (earlySessionData as GetSessionStatusResponse | null) ??
         (statusResult.success ? statusResult.data : null);
       if (!sessionData) {
-        throw new Error(statusResult.error?.message || "Failed to get results");
+        throw new Error(
+          (!statusResult.success && statusResult.error.message) ||
+            "Failed to get results",
+        );
       }
 
       const transcript = sessionData.transcript || "";
@@ -528,15 +486,15 @@ export function useScribe({
       const tDone = performance.now();
       const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
       console.info(
-        `[EkaScribe] timing — upload flush: ${secs(tUploaded - tStop)}, ` +
+        `[Scribe] timing — upload flush: ${secs(tUploaded - tStop)}, ` +
           `transcript: +${tTranscript ? secs(tTranscript - tUploaded) : "n/a"}, ` +
           `templates: +${secs(tDone - (tTranscript || tUploaded))}, ` +
           `total: ${secs(tDone - tStop)}` +
           (earlySessionData ? " (early-exit before session completed)" : ""),
       );
 
-      if (EKA_ENV === "DEV") {
-        console.log("[EkaScribe] Result:", {
+      if (DEBUG) {
+        console.log("[Scribe] Result:", {
           transcript,
           templates,
           structuredData,
@@ -569,8 +527,8 @@ export function useScribe({
 
   const cancelRecording = useCallback(async () => {
     try {
-      const ekascribe = instanceRef.current;
-      if (ekascribe) await ekascribe.cancelSession();
+      const client = instanceRef.current;
+      if (client) await client.cancelSession();
       stopTimer();
       accumulatedRef.current = 0;
       setDuration(0);
@@ -584,8 +542,8 @@ export function useScribe({
 
   const reset = useCallback(async () => {
     try {
-      const ekascribe = instanceRef.current;
-      if (ekascribe) await ekascribe.resetInstance();
+      const client = instanceRef.current;
+      if (client) await client.reset();
       instanceRef.current = null;
       sessionIdRef.current = null;
       callbacksRegisteredRef.current = false;
@@ -606,9 +564,9 @@ export function useScribe({
 
   const updateAccessToken = useCallback((newToken: string) => {
     tokenRef.current = newToken;
-    const ekascribe = instanceRef.current;
-    if (ekascribe) {
-      ekascribe.updateAuthTokens({ access_token: newToken });
+    const client = instanceRef.current;
+    if (client) {
+      client.setAccessToken(newToken);
     }
   }, []);
 
@@ -631,7 +589,7 @@ export function useScribe({
 }
 
 /**
- * Extract structured data from EkaScribe template results.
+ * Extract structured data from scribe template results.
  * Our dynamic templates return JSON with keys matching form field labels.
  */
 function extractStructuredData(templates: unknown[]): Record<string, unknown> {
