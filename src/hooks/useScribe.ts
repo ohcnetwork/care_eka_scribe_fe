@@ -7,6 +7,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  createShimmedWorkerBlobUrl,
+  installFetchCredentialsShim,
+} from "@/lib/scribe-fetch-shim";
+import {
   buildTemplateDescription,
   extractFormFields,
   getOrCreateTemplate,
@@ -57,6 +61,18 @@ function resolveScribeBackend(): { baseUrl: string; custom: boolean } {
 
 const { baseUrl: EKA_BASE_URL, custom: USING_CUSTOM_BACKEND } =
   resolveScribeBackend();
+
+// The SDK sends `credentials: "include"` on every request, but the CARE API
+// does not respond with `Access-Control-Allow-Credentials: true` — browsers
+// then block the request entirely ("Failed to fetch discovery document" in
+// production). Auth is a Bearer JWT, so credentials are never needed.
+if (USING_CUSTOM_BACKEND) {
+  try {
+    installFetchCredentialsShim(new URL(EKA_BASE_URL).origin);
+  } catch {
+    // Relative/invalid base URL — same-origin anyway, no shim needed.
+  }
+}
 
 /** CARE user JWT — same convention as care_scribe_fe. */
 function getCareAccessToken(): string {
@@ -245,7 +261,11 @@ export function useScribe({
     }
 
     initPromiseRef.current = (async () => {
-      const sharedWorkerUrl = await createWorkerBlobUrl();
+      // Custom backend: shim the worker's fetch so chunk uploads don't send
+      // credentials either (same CORS failure mode as discovery).
+      const sharedWorkerUrl = USING_CUSTOM_BACKEND
+        ? await createShimmedWorkerBlobUrl()
+        : await createWorkerBlobUrl();
       workerUrlRef.current = sharedWorkerUrl;
 
       const config: EkaScribeConfig = {
